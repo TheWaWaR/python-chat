@@ -7,6 +7,7 @@ import cgi
 import json
 from flask import Flask, request, render_template, session
 from random import Random
+from collections import OrderedDict
 
 app = Flask(__name__)
 app.secret_key = 'public'
@@ -14,6 +15,7 @@ app.debug = True
 
 HISTORY = []
 HISTORY_LIMIT = 80
+MEMBERS = OrderedDict()
 WS_DICT = {}
 rand = Random()
 
@@ -57,15 +59,19 @@ def api():
                 'body': '>>> {online}'
             }
             boardcast('online', [message])
+            MEMBERS[cid] = message
         ws_lst.append(ws)
         WS_DICT[cid] = ws_lst
 
         # Send history to connect socket
         ws.send(json.dumps({
             'type': 'message',
-            'messages': [_msg for _msg in HISTORY]
+            'messages': HISTORY
         }))
-
+        ws.send(json.dumps({
+            'type': 'online',
+            'messages': MEMBERS.values()
+        }))
 
         def close_client(e=None):
             ws_lst.remove(ws)
@@ -77,6 +83,7 @@ def api():
                     'body': '>>> {offline}'
                 }
                 boardcast('offline', [message])
+                MEMBERS.pop(cid)
                 
             print u'[%r, %r]: {Closed}' % (cid, ws_id)
             if e is not None: print type(e)
@@ -94,7 +101,7 @@ def api():
             print u'[%r, %r]: %s' % (cid, ws_id, body)
             message = {
                 'cid': cid,
-                'type': message,
+                'type': 'message',
                 'datetime': now,
                 'body': body
             }

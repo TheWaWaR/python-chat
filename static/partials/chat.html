@@ -1,0 +1,25 @@
+
+<div id="main" class="row">
+  <div class="col-sm-9">
+    <div id="messages-panel" class="panel panel-default">
+      <div class="panel-heading">Messages</div>
+      <div id="logs" class="panel-body">
+        <p class="msg" ng-repeat="message in messages">
+          <span>[{{message.datetime}}]</span>
+          <img ng-src="http://www.gravatar.com/avatar/{{message.cid}}?s=15&d=identicon&f=y\" />
+          <span>:</span>{{message.body}}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-3">
+    <div id="messages-panel" class="panel panel-default">
+      <div class="panel-heading">Members</div>
+      <div id="members" class="panel-body">
+        <p class="msg" ng-repeat="(cid, member) in members">
+          <span>[{{member.datetime}}]</span>
+          <img ng-src="http://www.gravatar.com/avatar/{{cid}}?s=15&d=identicon&f=y" />
+        </p>
+      </div>
+    </div>
+  </div>
+</div>

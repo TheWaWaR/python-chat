@@ -1,14 +1,11 @@
 <!DOCTYPE HTML>
-<html>                                                                           
+<html ng-app="chatApp">                                                                           
   <head>                                                                           
     <title>{{ cid }}</title>
     <link rel="stylesheet" href="/static/css/bootstrap.css" type="text/css" media="screen" />
     
     <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js"></script>
     <script type="text/javascript" src="/static/js/bootstrap.js"></script>
-    
-    <script type="text/javascript" charset="utf-8" src="/static/js/websocket-chat.js"></script>                                                                    
-
     <style type="text/css" media="screen">
       html, body {
           height: 100%;
@@ -28,7 +25,7 @@
          bottom: 30px;
       }
       #message-input{
-          width: 360px;
+          width: 480px;
       }
       .msg span{
           padding-right: 8px;
@@ -37,28 +34,18 @@
       }
     </style>
   </head>                                                                          
-  <body>
-
-    <div id="main" class="row">
-      <div class="col-sm-9">
-        <div id="messages-panel" class="panel panel-default">
-          <div class="panel-heading">Messages</div>
-          <div id="logs" class="panel-body"></div>
-        </div>
-      </div>
-      <div class="col-sm-3">
-        <div id="messages-panel" class="panel panel-default">
-          <div class="panel-heading">Members</div>
-          <div id="members" class="panel-body">
-          </div>
-        </div>
-      </div>
-    </div>
-    
+  <body ng-controller="Ctrl">
+    <div ng-include="templateUrl"></div>
     
     <form id="send-form" class="form-inline" role="form">
       <input type="text" class="form-control" id="message-input" placeholder="Enter Message">
       <button type="submit" class="btn btn-primary">Send</button>
     </form>
-  </body>                                                                          
+    
+  </body>
+  
+  <script type="text/javascript" src="/static/js/libs/angular/angular.js"></script>
+  <!-- <script type="text/javascript" charset="utf-8" src="/static/js/websocket-chat.js"></script> -->
+  <script type="text/javascript" charset="utf-8" src="/static/js/controllers/websocket-chat.js"></script>
+
 </html>                                  

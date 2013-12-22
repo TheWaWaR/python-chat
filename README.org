@@ -8,8 +8,9 @@
 
 * TODOs
 + 使用AngularJS来增强前端
-+ 学习 ws4py 库, 并使用它改写webapp.py  
++ 学习 ws4py 库, 并使用它改写webapp.py
 + 添加用户注册/登录, OpenID登录: [Google, GitHub, 豆瓣, 微博]
++ 检测WebSocket是否断线并尝试重连  
 
 * 如何运行本项目?
 #+BEGIN_SRC
