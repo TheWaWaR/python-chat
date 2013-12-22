@@ -1,0 +1,11 @@
+
+$(document).ready ()->
+    ws = new WebSocket "ws://#{document.domain}:5000/api"
+    ws.onmessage = (msg) ->
+        $('#log').append "<p>#{msg.data}</p>"
+    
+    $('form').submit (event) ->
+        ws.send $('#data').val()
+        $('#data').val ""
+        return false
+    return false

@@ -1,0 +1,17 @@
+<!DOCTYPE HTML>
+<html>                                                                           
+  <head>                                                                           
+    <title>{{ cid }}</title>                                                   
+    <script type="text/javascript" src="http://code.jquery.com/jquery-1.4.2.min.js"></script>
+    <script type="text/javascript" charset="utf-8" src="/static/js/websocket-chat.js"></script>                                                                    
+  </head>                                                                          
+  <body>                                                                           
+    <h1>Send:</h1>
+    <form method="POST" action="#">
+      <input type="text" name="data" id="data" />
+      <div><input type="submit" value="Send" /></div>                                         
+    </form>                                                                      
+    <h1>Receive:</h1>                                                            
+    <div id="log"></div>                                                         
+  </body>                                                                          
+</html>                                  

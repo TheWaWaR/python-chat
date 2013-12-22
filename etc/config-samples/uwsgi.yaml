@@ -1,0 +1,14 @@
+uwsgi: 
+# HOLD:  pythonpath   : /usr/local/lib/python2.7/dist-packages/
+  pythonpath   : {{ webapp-dir }}
+  virtualenv   : {{ webapp-dir }}/venv
+  socket       : /tmp/uwsgi-{{ app-name }}.sock
+  chmod-socket : 666
+  callable     : app
+  master       : true
+  module       : webapp
+  workers      : 8
+  threads      : 10
+  idle         : 1800
+  logto        : {{ webapp-dir }}/logs/uwsgi.log
+  static-map   : /static={{ webapp-dir }}/static
