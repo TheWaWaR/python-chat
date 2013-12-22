@@ -3,8 +3,10 @@
   $(document).ready(function() {
     var ws;
     ws = new WebSocket("ws://" + location.host + "/api");
-    ws.onmessage = function(msg) {
-      $('#log').append("<p>" + msg.data + "</p>");
+    ws.onmessage = function(event) {
+      var msg;
+      msg = JSON.parse(event.data);
+      $('#log').append("<p class=\"msg\"><span>[" + msg.datetime + "]</span> <img src=\"http://www.gravatar.com/avatar/" + msg.cid + "?s=15&d=identicon&f=y\" /> <span>:</span>" + msg.body + "</p>");
       return $('#messages-panel').scrollTop($('#messages-panel')[0].scrollHeight);
     };
     $('form').submit(function(event) {

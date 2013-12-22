@@ -4,6 +4,7 @@ from gevent.pywsgi import WSGIServer
 
 from datetime import datetime
 import cgi
+import json
 from flask import Flask, request, render_template, session
 from random import Random
 
@@ -11,7 +12,7 @@ app = Flask(__name__)
 app.secret_key = 'public'
 
 HISTORY = []
-HISTORY_LIMIT = 20
+HISTORY_LIMIT = 80
 WS_DICT = {}
 rand = Random()
 
@@ -20,7 +21,8 @@ rand = Random()
 def index():
     cid = session.get('cid', None)
     if cid is None:
-        session['cid'] = rand.randint(2**29, 2**30)
+        cid = rand.randint(2**29, 2**30)
+        session['cid'] = cid
     return render_template('index.html', cid=cid)
 
 
@@ -43,7 +45,7 @@ def api():
         WS_DICT[cid] = ws_lst
 
         # Send history to connect socket
-        for _msg in HISTORY: ws.send(_msg)
+        for _msg in HISTORY: ws.send(json.dumps(_msg))
             
         def close_client(e=None):
             ws_lst.remove(ws)
@@ -53,23 +55,25 @@ def api():
             
         while True:
             try:
-                message = ws.receive()
-                now = datetime.now().strftime("%m-%d %H:%M")
-                if message is not None:
-                    message = unicode(cgi.escape(message), encoding='utf-8')
-                    print u'[%r, %r]: %s' % (cid, ws_id, message)
-                    message = u'%r@[%s]:  %s' % (cid, now, message)
-                else:
-                    return close_client()
+                body = ws.receive()
+                if body is None: return close_client()
             except WebSocketError, e:
                 return close_client(e)
-
+                
+            now = datetime.now().strftime("%m-%d %H:%M:%S")
+            body = unicode(cgi.escape(body), encoding='utf-8')
+            print u'[%r, %r]: %s' % (cid, ws_id, body)
+            message = {
+                'cid': cid,
+                'datetime': now,
+                'body': body
+            }
             HISTORY.append(message)
             if len(HISTORY) > HISTORY_LIMIT+5: HISTORY = HISTORY[-HISTORY_LIMIT:]
             
             for member_lst in WS_DICT.values():
                 for member in member_lst:
-                    member.send(message)
+                    member.send(json.dumps(message))
 
 
 if __name__ == '__main__':
