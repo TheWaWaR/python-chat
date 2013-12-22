@@ -10,6 +10,7 @@ from random import Random
 
 app = Flask(__name__)
 app.secret_key = 'public'
+app.debug = True
 
 HISTORY = []
 HISTORY_LIMIT = 80
@@ -35,20 +36,48 @@ def api():
         raise ValueError('cid is None')
         
     if request.environ.get('wsgi.websocket'):
-            
+        def boardcast(msg_type, messages):
+            for member_lst in WS_DICT.values():
+                for member in member_lst:
+                    member.send(json.dumps({
+                        'type': msg_type,
+                        'messages': messages
+                    }))
+
         ws = request.environ['wsgi.websocket']
         ws_id = id(ws)
         print 'New connect: %r --> %r' % (cid, ws_id)
         
         ws_lst = WS_DICT.get(cid, [])
+        if len(ws_lst) == 0:
+            now = datetime.now().strftime("%m-%d %H:%M:%S")            
+            message = {
+                'cid': cid,
+                'datetime': now,
+                'body': '>>> {online}'
+            }
+            boardcast('online', [message])
         ws_lst.append(ws)
         WS_DICT[cid] = ws_lst
 
         # Send history to connect socket
-        ws.send(json.dumps([_msg for _msg in HISTORY]))
-            
+        ws.send(json.dumps({
+            'type': 'message',
+            'messages': [_msg for _msg in HISTORY]
+        }))
+
+
         def close_client(e=None):
             ws_lst.remove(ws)
+            if len(ws_lst) == 0:
+                now = datetime.now().strftime("%m-%d %H:%M:%S")
+                message = {
+                    'cid': cid,
+                    'datetime': now,
+                    'body': '>>> {offline}'
+                }
+                boardcast('offline', [message])
+                
             print u'[%r, %r]: {Closed}' % (cid, ws_id)
             if e is not None: print type(e)
             return ''
@@ -65,15 +94,13 @@ def api():
             print u'[%r, %r]: %s' % (cid, ws_id, body)
             message = {
                 'cid': cid,
+                'type': message,
                 'datetime': now,
                 'body': body
             }
             HISTORY.append(message)
             if len(HISTORY) > HISTORY_LIMIT+5: HISTORY = HISTORY[-HISTORY_LIMIT:]
-            
-            for member_lst in WS_DICT.values():
-                for member in member_lst:
-                    member.send(json.dumps([message]))
+            boardcast('message', [message])
 
 
 if __name__ == '__main__':

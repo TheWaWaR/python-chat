@@ -4,16 +4,24 @@
     var ws;
     ws = new WebSocket("ws://" + location.host + "/api");
     ws.onmessage = function(event) {
-      var msg, msgs, _i, _len;
-      msgs = JSON.parse(event.data);
-      console.log(msgs);
-      for (_i = 0, _len = msgs.length; _i < _len; _i++) {
-        msg = msgs[_i];
-        $('#log').append("<p class=\"msg\"><span>[" + msg.datetime + "]</span> <img src=\"http://www.gravatar.com/avatar/" + msg.cid + "?s=15&d=identicon&f=y\" /> <span>:</span>" + msg.body + "</p>");
+      var data, msg, _i, _len, _ref;
+      data = JSON.parse(event.data);
+      console.log(data);
+      switch (data.type) {
+        case 'online':
+          return $('#members').append("<p class=\"msg\"><span>[" + data.messages[0].datetime + "]</span> <img src=\"http://www.gravatar.com/avatar/" + data.messages[0].cid + "?s=15&d=identicon&f=y\" /></p>");
+        case 'offline':
+          return console.log(data);
+        case 'message':
+          _ref = data.messages;
+          for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+            msg = _ref[_i];
+            $('#logs').append("<p class=\"msg\"><span>[" + msg.datetime + "]</span> <img src=\"http://www.gravatar.com/avatar/" + msg.cid + "?s=15&d=identicon&f=y\" /> <span>:</span>" + msg.body + "</p>");
+          }
+          return $('#logs').animate({
+            scrollTop: $('#logs')[0].scrollHeight
+          }, "300", "swing");
       }
-      return $('#messages-panel').animate({
-        scrollTop: $('#messages-panel')[0].scrollHeight
-      }, "300", "swing");
     };
     $('form').submit(function(event) {
       var msg;

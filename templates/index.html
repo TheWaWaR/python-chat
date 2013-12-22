@@ -19,9 +19,9 @@
           width: 800px;
           margin: 0 auto;
       }
-      #messages-panel{
+      #logs, #members{
           overflow: scroll;
-          height: 100%;
+          height: 560px;
       }
       #send-form{
          position: fixed;
@@ -38,13 +38,23 @@
     </style>
   </head>                                                                          
   <body>
-    
-    <div id="messages-panel" class="panel panel-default">
-      <div class="panel-heading">Messages</div>
-      <div class="panel-body">
-        <div id="log"></div>
+
+    <div id="main" class="row">
+      <div class="col-sm-9">
+        <div id="messages-panel" class="panel panel-default">
+          <div class="panel-heading">Messages</div>
+          <div id="logs" class="panel-body"></div>
+        </div>
+      </div>
+      <div class="col-sm-3">
+        <div id="messages-panel" class="panel panel-default">
+          <div class="panel-heading">Members</div>
+          <div id="members" class="panel-body">
+          </div>
+        </div>
       </div>
     </div>
+    
     
     <form id="send-form" class="form-inline" role="form">
       <input type="text" class="form-control" id="message-input" placeholder="Enter Message">
