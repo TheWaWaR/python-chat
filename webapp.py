@@ -45,7 +45,7 @@ def api():
         WS_DICT[cid] = ws_lst
 
         # Send history to connect socket
-        for _msg in HISTORY: ws.send(json.dumps(_msg))
+        ws.send(json.dumps([_msg for _msg in HISTORY]))
             
         def close_client(e=None):
             ws_lst.remove(ws)
@@ -73,7 +73,7 @@ def api():
             
             for member_lst in WS_DICT.values():
                 for member in member_lst:
-                    member.send(json.dumps(message))
+                    member.send(json.dumps([message]))
 
 
 if __name__ == '__main__':

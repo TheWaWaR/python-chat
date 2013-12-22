@@ -4,10 +4,16 @@
     var ws;
     ws = new WebSocket("ws://" + location.host + "/api");
     ws.onmessage = function(event) {
-      var msg;
-      msg = JSON.parse(event.data);
-      $('#log').append("<p class=\"msg\"><span>[" + msg.datetime + "]</span> <img src=\"http://www.gravatar.com/avatar/" + msg.cid + "?s=15&d=identicon&f=y\" /> <span>:</span>" + msg.body + "</p>");
-      return $('#messages-panel').scrollTop($('#messages-panel')[0].scrollHeight);
+      var msg, msgs, _i, _len;
+      msgs = JSON.parse(event.data);
+      console.log(msgs);
+      for (_i = 0, _len = msgs.length; _i < _len; _i++) {
+        msg = msgs[_i];
+        $('#log').append("<p class=\"msg\"><span>[" + msg.datetime + "]</span> <img src=\"http://www.gravatar.com/avatar/" + msg.cid + "?s=15&d=identicon&f=y\" /> <span>:</span>" + msg.body + "</p>");
+      }
+      return $('#messages-panel').animate({
+        scrollTop: $('#messages-panel')[0].scrollHeight
+      }, "300", "swing");
     };
     $('form').submit(function(event) {
       var msg;
