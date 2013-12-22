@@ -2,3 +2,11 @@
 * Features
 + 消息通过WebSocket发送和接收
 + 浏览器多个Tab页共享Session
+
+* 如何运行本项目?
+#+BEGIN_SRC
+git clone git@github.com:TheWaWaR/python-websocket-demos.git
+cd python-websocket-demos
+pip install -r deps.txt
+python webapp.py 8888
+#+END_SRC
