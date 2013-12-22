@@ -1,45 +1,4 @@
-* TODOs
-+ Bootstrap 3
-+ AngularJS `1.2.*`
-+ AngularJS-UI [...]
-+ Flask-Script
-+ Redis (For cache)
-+ Celery (For tasks)
 
-
-* Dependencies  
-+ For deploy: [ supervisor, uwsgi ]
-+ For application: [ flask ]
-  
-* Deploy Steps
-  1. Make virtualenv folder `venv`, then install the dependencies
-  2. Copy `nginx-part.conf` ==> `/usr/local/nginx/conf/sites-enabled/`
-     > Then change it for your app, then link softly to sites-avaiable
-  3. Copy `supervisor-part.conf` ==> `/etc/supervisord.conf`
-     > Then change it for your app.
-  4. Copy `uwsgi.yaml` ==> `{webapp-dir}/etc/`
-     > Then change it for your app.
-  5. Kill supervisord process, then restart it.
-     > `supervisord -c /etc/supervisord.conf`
-     
-#+BEGIN_SRC bash
-# Setp.1
-cd {webapp-dir}
-virtualenv venv
-mkdir logs
-
-# Step.2
-cp etc/config-samples/nginx-part.conf /usr/local/nginx/conf/sites-enabled/{domain-name}
-vim /usr/local/nginx/conf/sites-enabled/{domain-name}
-
-# Step.3
-vim etc/config-samples/supervisor-part.conf /etc/supervisord.conf
-
-# Step.4
-cp etc/config-samples/uwsgi.yaml etc/
-vim etc/uwsgi.yaml
-
-# Step.5
-pkill -KILL supervisord
-supervisord -c /etc/supervisord.conf
-#+END_SRC
+* Features
++ 消息通过WebSocket发送和接收
++ 浏览器多个Tab页共享Session
