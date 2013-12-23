@@ -3,6 +3,7 @@
   <head>                                                                           
     <title>{{ cid }}</title>
     <link rel="stylesheet" href="/static/css/bootstrap.css" type="text/css" media="screen" />
+    <link rel="stylesheet" href="/static/css/gh-fork-ribbon.css" type="text/css" media="screen" />
     
     <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js"></script>
     <script type="text/javascript" src="/static/js/bootstrap.js"></script>
@@ -16,9 +17,20 @@
           width: 800px;
           margin: 0 auto;
       }
+      #main .row, #main .col-sm-9, #main .col-sm-3, #messages-panel, #members-panel{
+          height: 100%;
+          overflow: hidden;
+      }
+      #main{
+          height: 100%;
+      }
+      .panel-container {
+          padding-bottom: 40px;
+          height: 100%;
+      }
       #logs, #members{
-          overflow: scroll;
-          height: 560px;
+          overflow-y: scroll;
+          height:100%;
       }
       #send-form{
          position: fixed;
@@ -35,7 +47,13 @@
     </style>
   </head>                                                                          
   <body ng-controller="Ctrl">
-    <div ng-include="templateUrl"></div>
+    <div class="github-fork-ribbon-wrapper right">
+      <div class="github-fork-ribbon">
+        <a href="https://github.com/TheWaWaR/blog">Fork me on GitHub</a>
+      </div>
+    </div>
+    
+    <div id="main" ng-include="templateUrl"></div>
     
     <form id="send-form" class="form-inline" role="form">
       <input type="text" class="form-control" id="message-input" placeholder="Enter Message">

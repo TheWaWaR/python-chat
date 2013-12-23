@@ -28,6 +28,7 @@ chatApp.controller("Ctrl", [
   '$scope', 'ChatService', function($scope, ChatService) {
     $scope.templateUrl = "/static/partials/chat.html";
     $scope.messages = [];
+    $scope.cids = [];
     $scope.members = {};
     ChatService.connect();
     ChatService.subscribe(function(event) {
@@ -39,6 +40,7 @@ chatApp.controller("Ctrl", [
           _ref = data.messages;
           for (_i = 0, _len = _ref.length; _i < _len; _i++) {
             msg = _ref[_i];
+            $scope.cids.push(msg.cid);
             $scope.members[msg.cid] = {
               'datetime': msg.datetime
             };
@@ -48,6 +50,7 @@ chatApp.controller("Ctrl", [
           _ref1 = data.messages;
           for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
             msg = _ref1[_j];
+            $scope.cids.splice($scope.cids.indexOf(msg.cid), 1);
             delete $scope.members[msg.cid];
           }
           break;
@@ -58,11 +61,13 @@ chatApp.controller("Ctrl", [
             $scope.messages.push(msg);
           }
           console.log('$scope.messages:', $scope.messages, data.messages);
-          $('#logs').animate({
-            scrollTop: $('#logs')[0].scrollHeight
-          }, "300", "swing");
       }
       $scope.$apply();
+      if (data.type === 'message') {
+        $('#logs').stop().animate({
+          scrollTop: $('#logs')[0].scrollHeight
+        }, "300", "swing");
+      }
       return console.log('$scope.members:', $scope.members);
     });
     return 'ok';
