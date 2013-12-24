@@ -74,12 +74,14 @@ chatApp.controller("Ctrl", [
   }
 ]);
 
-$('form').submit(function(event) {
-  var msg;
-  msg = $('#message-input').val();
-  if (msg.length > 0) {
-    ws.send(msg);
-    $('#message-input').val("");
-  }
-  return false;
+$(document).ready(function() {
+  return $('form').submit(function(event) {
+    var msg;
+    msg = $('#message-input').val();
+    if (msg.length > 0) {
+      ws.send(msg);
+      $('#message-input').val("");
+    }
+    return false;
+  });
 });

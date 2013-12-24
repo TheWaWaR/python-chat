@@ -1,6 +1,6 @@
 
 
-ws = null    
+ws = null
 chatApp = angular.module "chatApp", []
 
 chatApp.factory "ChatService", ()->
@@ -51,10 +51,11 @@ chatApp.controller "Ctrl", ['$scope', 'ChatService', ($scope, ChatService) ->
     return 'ok'
 ]
 
-        
-$('form').submit (event) ->
-    msg = $('#message-input').val()
-    if msg.length > 0
-        ws.send msg
-        $('#message-input').val ""
-    return false
+    
+$(document).ready ()->
+    $('form').submit (event) ->
+        msg = $('#message-input').val()
+        if msg.length > 0
+            ws.send msg
+            $('#message-input').val ""
+        return false
