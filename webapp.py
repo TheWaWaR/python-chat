@@ -3,7 +3,6 @@ from geventwebsocket.exceptions import WebSocketError
 from gevent.pywsgi import WSGIServer
 
 from datetime import datetime
-import cgi
 import json
 from flask import Flask, request, render_template, session
 from random import Random
@@ -97,7 +96,7 @@ def api():
                 return close_client(e)
                 
             now = datetime.now().strftime("%m-%d %H:%M:%S")
-            body = unicode(cgi.escape(body), encoding='utf-8')
+            body = unicode(body, encoding='utf-8')
             print u'[%r, %r]: %s' % (cid, ws_id, body)
             message = {
                 'cid': cid,

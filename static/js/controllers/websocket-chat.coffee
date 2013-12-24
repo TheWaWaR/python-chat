@@ -41,13 +41,13 @@ chatApp.controller "Ctrl", ['$scope', 'ChatService', ($scope, ChatService) ->
             when 'message'
                 for msg in data.messages
                     $scope.messages.push msg
-                console.log '$scope.messages:', $scope.messages, data.messages
+                # console.log '$scope.messages:', $scope.messages, data.messages
 
         $scope.$apply()
         if data.type is 'message'
             $('#logs').stop().animate {scrollTop: $('#logs')[0].scrollHeight}, "300", "swing"
     
-        console.log '$scope.members:', $scope.members
+        # console.log '$scope.members:', $scope.members
     return 'ok'
 ]
 

@@ -60,15 +60,13 @@ chatApp.controller("Ctrl", [
             msg = _ref2[_k];
             $scope.messages.push(msg);
           }
-          console.log('$scope.messages:', $scope.messages, data.messages);
       }
       $scope.$apply();
       if (data.type === 'message') {
-        $('#logs').stop().animate({
+        return $('#logs').stop().animate({
           scrollTop: $('#logs')[0].scrollHeight
         }, "300", "swing");
       }
-      return console.log('$scope.members:', $scope.members);
     });
     return 'ok';
   }
