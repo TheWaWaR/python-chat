@@ -8,18 +8,24 @@ chatApp = angular.module("chatApp", []);
 chatApp.factory("ChatService", function() {
   var service;
   service = {};
+  service.setOnmessage = function(callback) {
+    return service.onmessage = callback;
+  };
+  service.setOnopen = function(callback) {
+    return service.onopen = callback;
+  };
   service.connect = function() {
     if (service.ws) {
       return;
     }
     ws = new WebSocket("ws://" + location.host + "/api");
+    ws.onopen = function(event) {
+      return service.onopen(event);
+    };
     ws.onmessage = function(event) {
-      return service.callback(event);
+      return service.onmessage(event);
     };
     return service.ws = ws;
-  };
-  service.subscribe = function(callback) {
-    return service.callback = callback;
   };
   return service;
 });
@@ -30,8 +36,10 @@ chatApp.controller("Ctrl", [
     $scope.messages = [];
     $scope.cids = [];
     $scope.members = {};
-    ChatService.connect();
-    ChatService.subscribe(function(event) {
+    ChatService.setOnopen(function() {
+      return console.log('Opened');
+    });
+    ChatService.setOnmessage(function(event) {
       var data, msg, _i, _j, _k, _len, _len1, _len2, _ref, _ref1, _ref2;
       data = JSON.parse(event.data);
       console.log('data', data);
@@ -68,6 +76,7 @@ chatApp.controller("Ctrl", [
         }, "300", "swing");
       }
     });
+    ChatService.connect();
     return 'ok';
   }
 ]);

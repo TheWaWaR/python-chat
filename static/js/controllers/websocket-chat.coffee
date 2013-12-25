@@ -5,17 +5,22 @@ chatApp = angular.module "chatApp", []
 
 chatApp.factory "ChatService", ()->
     service = {}
+    
+    service.setOnmessage = (callback) ->
+        service.onmessage = callback
+    service.setOnopen = (callback) ->
+        service.onopen = callback
+        
     service.connect = () ->
         return if service.ws
 
         ws = new WebSocket "ws://#{location.host}/api"
+        ws.onopen = (event) ->
+            service.onopen(event)
         ws.onmessage = (event) ->
-            service.callback(event)
+            service.onmessage(event)
 
         service.ws = ws
-    
-    service.subscribe = (callback) ->
-        service.callback = callback
 
     return service
     
@@ -25,8 +30,10 @@ chatApp.controller "Ctrl", ['$scope', 'ChatService', ($scope, ChatService) ->
     $scope.cids = []
     $scope.members = {}
 
-    ChatService.connect()
-    ChatService.subscribe (event) ->
+    ChatService.setOnopen () ->
+        console.log 'Opened'
+        
+    ChatService.setOnmessage (event) ->
         data = JSON.parse event.data
         console.log 'data', data
         switch data.type
@@ -46,8 +53,9 @@ chatApp.controller "Ctrl", ['$scope', 'ChatService', ($scope, ChatService) ->
         $scope.$apply()
         if data.type is 'message'
             $('#logs').stop().animate {scrollTop: $('#logs')[0].scrollHeight}, "300", "swing"
-    
         # console.log '$scope.members:', $scope.members
+    ChatService.connect()
+    
     return 'ok'
 ]
 
