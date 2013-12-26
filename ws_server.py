@@ -6,33 +6,143 @@ from ws4py.server.wsgiutils import WebSocketWSGIApplication
 
 import os
 import hashlib
+import json
 from datetime import datetime
 
 import gevent
-import json
 import redis
 
 pool = redis.ConnectionPool(connection_class=redis.UnixDomainSocketConnection,
-                            max_connections=None,
                             path='/tmp/redis.sock')
 
-K_USERS_ID = 'users:id'
-K_SESSIONS_ID = 'sessions:id'
+
+
+class Session(object):
+    K_SESSIONS = 'sessions' # Active sessions
+    K_SESSIONS_ID = 'sessions:id'
+    
+    def __init__(self, rd, oid, channel):
+        self.rd = rd
+        self.oid = oid
+        self.channel = channel
+        self.KEY = 'session:%d'%self.oid
+        
+    @staticmethod
+    def create(rd):
+        oid = rd.incr(Session.K_SESSIONS_ID)
+        channel = 'session-%d'%oid
+        session = Session(rd, oid)
+        rd.hset(session.KEY, 'oid', oid) 
+        rd.hset(session.KEY, 'channel', channel) 
+        return session
+
+    def destory(self):
+        # remove from users' sessions
+#         self.rd.delete(self.KEY)
+
+
+class User(object):
+    K_USERS = 'users' # Active users
+    K_USERS_ID = 'users:id'
+    
+    def __init__(self, rd, oid, name):
+        self.rd = rd
+        self.oid = oid
+        self.name = name
+        self.KEY = 'user:%d'%self.oid
+
+    def destory(self):
+        self.rd.delete(self.KEY) # Seems won't happen for now
+
+    def online(self):
+        self.rd.hset(User.K_USERS, self.oid, True)
+
+    def offline(self):
+        self.rd.hdel(User.K_USERS, self.oid)
+        
+    def join_room(self, rid):
+        pass
+        
+    def leave_room(self, rid):
+        pass
+        
+    @staticmethod
+    def create(rd, name):
+        oid = rd.incr(User.K_USERS_ID)
+        user = User(rd, oid, name)
+        rd.hset(user.KEY, 'oid', oid)
+        rd.hset(user.KEY, 'name', name)
+        return user
+
+    @staticmethod
+    def is_online(rd, uid):
+        return rd.hexists(User.K_USERS, uid)
+        
+    @staticmethod
+    def online_users(rd):
+        return rd.hkeys(User.K_USERS)
+
+        
+class Room(object):
+    K_ROOMS = 'rooms' # Active rooms
+    K_ROOMS_ID = 'rooms:id'
+    
+    def __init__(self, rd, oid, name, channel):
+        self.rd = rd
+        self.oid = oid
+        self.name = name
+        self.channel = channel
+        self.KEY = 'room:%d'%self.oid # Object key
+        self.KEY_MEMBERS = 'room:%d:members'%self.oid # Member list key
+
+    @staticmethod
+    def create(rd, name):
+        oid = rd.incr(Room.K_ROOMS_ID)
+        channel = 'room-%d' % oid
+        room = Room(rd, oid, name, channel)
+        rd.hset(room.KEY, 'oid', oid) 
+        rd.hset(room.KEY, 'name', name)
+        rd.hset(room.KEY, 'channel', channel)
+        return room
+
+    def destory(self):
+        self.rd.delete(self.KEY)
+
+    @staticmethod
+    def members_key(rid):
+        return 'room:%d:members'%rid
+        
+    @staticmethod
+    def members(rd, rid):
+        return rd.hkeys(Room.members_key(rid))
+
+    @staticmethod
+    def push(rd, rid, uid):
+        return rd.hset(Room.members_key(rid), uid, True)
+
+    @staticmethod
+    def pop(rd, rid, uid):
+        return rd.hdel(Room.members_key(rid), uid)
+        
 
 class ChatWebSocket(WebSocket):
     keep_channels = ['system', ]
-    
+
+    # ==============================================================================
+    #  WebSocket method override
+    # ==============================================================================
     def opened(self):
         self.redis = redis.StrictRedis(connection_pool=pool)
         self.greenlets = {}
         self.pubsubs = {}
-        self.connected_users = {}
-        self.connected_rooms = {}
+        self.queues = {}
+        self.connected_users = {} # {'id': uid, 'session_id': session_id}
+        self.connected_rooms = {} # {'id': rid}
         
         self.uid = None
         # Start global channels
         for name in ChatWebSocket.keep_channels:
-            self.greenlets[name] = gevent.spawn(self.listen_channel, name)
+            self.subscribe(name)
         
         print 'Opened!'
 
@@ -43,29 +153,24 @@ class ChatWebSocket(WebSocket):
         for g_key in ChatWebSocket.keep_channels:
             self.unsubscribe(g_key)
             
+        offline_msg = {
+            'path': 'presence',
+            'action': 'offline',
+            'uid': self.uid
+        }
         # 2. Unsubscribe users
         print '2. Unsubscribe users'
-        user_destory_msg = {
-            'type': 'session',
-            'action': 'destory', # Destory
-            'from_id': self.uid,
-        }
         for uid in self.connected_users:
             user_key = 'user-%d'%uid
             self.unsubscribe(user_key)
-            self.redis.publish(user_key, json.dumps(user_destory_msg))
+            self.redis.publish(user_key, json.dumps(offline_msg))
 
         # 3. Unsubscribe rooms
         print '3. Unsubscribe rooms'
-        room_offline_msg = {
-            'path': 'message',
-            'type': 'offline',
-            'uid': self.uid
-        }
         for rid in self.connected_rooms:
             room_key = 'room-%d'%rid
             self.unsubscribe(room_key)
-            self.redis.publish(room_key, json.dumps(room_offline_msg))
+            self.redis.publish(room_key, json.dumps(offline_msg))
 
         # 4. Unsubscribe current user's mailbox
         print '4. Unsubscribe current user\'s mailbox'
@@ -85,18 +190,22 @@ class ChatWebSocket(WebSocket):
         print 'Message received: %s' % message.data
 
         router = {
-            'init_client': self.init_client,
-            'rooms'      : self.rooms, # List available rooms
-            'add_room'   : self.add_room,
-            'remove_room': self.remove_room, # Owner/Admin only
-            'online'     : self.online,
-            'offline'    : self.offline, # :HOLD:
-            'connect'    : self.connect, # Room or user
-            'disconnect' : self.disconnect,
-            'message'    : self.message,
-            # 'history'    : self.history,  # Get message history
-            # 'users'      : self.users,  # Get user info by ids
-            'typing'     : self.typing,
+            # Common
+            'create_client' : self.create_client,
+            'online'        : self.online,     # aka: Login 
+            'offline'       : self.offline,    # :HOLD:
+            'connect'       : self.connect,    # Room or user(session)
+            'disconnect'    : self.disconnect, # Room or user(session)
+            # Room
+            'rooms'         : self.rooms,       # List available rooms
+            'create_room'   : self.create_room, # 
+            'destory_room'  : self.destory_room, # NOTE: Owner/Admin only
+            'members'       : self.members, # Get user list by room id
+            # Message
+            'history'       : self.history, # Get message history
+            'message'       : self.message, # Send message to room or user(session)
+            'typing'        : self.typing,
+            # 'presence'      : self.presence, # current user online/offline
         }
         try:
             # data = {
@@ -117,78 +226,98 @@ class ChatWebSocket(WebSocket):
         except TypeError, e:
             print e
 
-
-    def unsubscribe(self, channel_name):
-        ps = self.pubsubs.pop(channel_name)
-        greenlet = self.greenlets.pop(channel_name)
-        
-        ps.unsubscribe(channel_name)
+    # ==============================================================================
+    #  Gevent stuff
+    # ==============================================================================
+    def unsubscribe(self, channel):
+        pubsub = self.pubsubs.pop(channel)
+        greenlet = self.greenlets.pop(channel)
+        pubsub.unsubscribe(channel)
         greenlet.join()
-        
 
-    def listen_channel(self, name):
-        print 'Start channel:', name
-        ps = self.redis.pubsub()
-        self.pubsubs[name] = ps
-        ps.subscribe(name)
-        
-        channel = ps.listen()
-        channel.next()
-        while True:
-            msg = channel.next()
-            if msg['type'] == 'unsubscribe':
-                print 'Exit channel:', name
-                ps.close()
-                break
+    def subscribe(self, channel):
+        print 'Start channel:', channel
+        pubsub = self.redis.pubsub()
+        self.pubsubs[channel] = pubsub
+        pubsub.subscribe(channel)
+        queue = pubsub.listen()
+        queue.next()
+        self.queues[channel] = queue
+
+        def channel_processor():
+            while True:
+                msg = queue.next()
+                if msg['type'] == 'unsubscribe':
+                    print 'Exit channel:', channel
+                    pubsub.close()
+                    break
+                    
+                print 'Received message from redis:', msg
+                self.send(msg['data'])
                 
-            print 'Received message from redis:', msg
-            self.send(msg['data'])
+        self.greenlets[channel] = gevent.spawn(channel_processor)
 
-    def setup_mailbox(self, user_key):
+
+    def start_mailbox(self):
         ''' Current user's Mailbox '''
-        print 'Start mailbox:', user_key
-        ps = self.redis.pubsub()
-        self.pubsubs[user_key] = ps
-        ps.subscribe(user_key)
         
-        channel = ps.listen()
-        channel.next()
-        while True:
-            msg = channel.next()
-            if msg['type'] == 'unsubscribe':
-                print 'Exit mail box:', user_key
-                ps.close()
-                break
-
-            data = json.loads(msg['data'])
-            if data['type'] == 'session':
-                action = data['action']
-                from_id = data['from_id']
-                if action == 'create':
-                    if from_id in self.connected_users:
-                        print '%d already connected!' % from_id
-                    else:
-                        session_id = data['session_id']
+        user_key = 'user-%d' % self.uid
+        if user_key in self.greenlets:
+            print 'Mailbox already started!'
+            
+        print 'Starting mailbox:', user_key
+        pubsub = self.redis.pubsub()
+        self.pubsubs[user_key] = pubsub
+        pubsub.subscribe(user_key)
+        
+        queue = pubsub.listen()
+        queue.next()
+        
+        def mailbox_processer():
+            while True:
+                msg = queue.next()
+                if msg['type'] == 'unsubscribe':
+                    print 'Exit mail box:', user_key
+                    pubsub.close()
+                    break
+    
+                data = json.loads(msg['data'])
+                path = data['path']
+                if path == 'session':
+                    action = data['action']
+                    from_id = data['from_id']
+                    # Create session
+                    if action == 'create':
+                        if from_id in self.connected_users:
+                            print '%d already connected!' % from_id
+                        else:
+                            session_id = data['session_id']
+                            session_key = 'session-%d'%session_id
+                            self.subscribe(session_key)
+                            self.connected_users[from_id] = {
+                                'id': from_id,
+                                'session_id': session_id
+                            }
+                    # Destory session
+                    elif action == 'destory':
+                        user = self.connected_users.pop(from_id)
+                        session_id = user['session_id']
                         session_key = 'session-%d'%session_id
-                        self.greenlets[session_key] = gevent.spawn(self.listen_channel, session_key)
-                        self.connected_users[from_id] = {
-                            'user_id': from_id,
-                            'session_id': session_id
-                        }
-                elif action == 'destory':
-                    user = self.connected_users.pop(from_id)
-                    session_id = user['session_id']
-                    session_key = 'session-%d'%session_id
-                    self.unsubscribe(session_key)
-            else:
-                raise ValueError('Mailbox received bad data:' % msg)
-                
-            print 'Received message from redis:', msg, type(msg)
-            # self.send(msg['data'])
+                        self.unsubscribe(session_key)
+                elif path == 'presence':
+                    pass
+                else:
+                    raise ValueError('Mailbox received bad data:' % msg)
+                    
+                print 'Received message from redis:', msg, type(msg)
+                # self.send(msg['data'])
+        self.greenlets[user_key] = gevent.spawn(mailbox_processer)
 
-
-    ### API methods ###
-    def init_client(self, _):
+        
+    # ==============================================================================
+    #  API methods
+    # ==============================================================================
+    def create_client(self, _):
         token = hashlib.sha1(os.urandom(64)).hexdigest()
         uid = self.redis.incr(K_USERS_ID)
         init_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -196,23 +325,18 @@ class ChatWebSocket(WebSocket):
         self.redis.hset('users:%d'%uid, 'init_at', init_at)
         return {'token': token}
 
-    def rooms(self, _):
-        return {'rooms': [1, 2]} # return room ids
-        
-    def add_room(self, _): pass
-        
-    def remove_room(self, _): pass
-
     def online(self, data):
         token = data['token']
         uid = int(self.redis.get('users:%s'%token))
-        # init_at = self.redis.hget('users:%d'%uid, 'init_at')
+        init_at = self.redis.hget('users:%d'%uid, 'init_at')
         user_key = 'user-%d' % uid
         self.uid = uid
         # Current user's mail box
-        self.greenlets[user_key] = gevent.spawn(self.setup_mailbox, user_key)
-        return {'uid': str(uid)}
-
+        self.subscribe(user_key)
+        return {
+            'uid': str(uid),
+            'init_at': init_at
+        }
         
     def offline(self, _):
         # Equal to `closed` ???
@@ -223,15 +347,12 @@ class ChatWebSocket(WebSocket):
         target_type = data['type']
         target_id = int(data['id'])
         
-        if target_id in ChatWebSocket.keep_channels:
-            raise ValueError('Invalidate target id: %s' % data)
-            
         if target_type == 'room':
             room_key = 'room-%d' % target_id
-            self.greenlets[room_key] = gevent.spawn(self.listen_channel, room_key)
+            self.subscribe(room_key)
             room_online_msg = {
-                'path': 'message',
-                'type': 'online',
+                'path': 'presence',
+                'action': 'online',
                 'uid': self.uid
             }
             self.redis.publish(room_key, json.dumps(room_online_msg))
@@ -242,16 +363,16 @@ class ChatWebSocket(WebSocket):
             session_id = self.redis.incr(K_SESSIONS_ID)
             session_key = 'session-%d' % session_id
             create_session_msg = {
-                'type': 'session',
+                'path': 'session',
                 'action': 'create', # Create
                 'from_id': self.uid,
                 'session_id': session_id,
             }
             # Mail to target user new session
             self.redis.publish(target_user_key, json.dumps(create_session_msg))
-            self.greenlets[session_key] = gevent.spawn(self.listen_channel, session_key)
+            self.subscribe(session_key)
             self.connected_users[target_id] = {
-                'user_id': target_id,
+                'id': target_id,
                 'session_id': session_id
             }
         return {
@@ -259,16 +380,11 @@ class ChatWebSocket(WebSocket):
             'id'     : target_id,
             'status' : 'success'
         }
-            
         
     def disconnect(self, data):
         ''' Disconnect to room or user '''
         target_type = data['type']
         target_id = int(data['id'])
-        
-        if target_id in ChatWebSocket.keep_channels:
-            raise ValueError('Invalidate target id: %s' % data)
-
             
         if target_type == 'room':
             if target_id in self.connected_rooms:
@@ -284,7 +400,7 @@ class ChatWebSocket(WebSocket):
                 session_id = user['session_id']
                 session_key = 'session-%d' % session_id
                 msg = {
-                    'type': 'session',
+                    'path': 'session',
                     'action': 'destory', # Destory
                     'from_id': self.uid,
                 }
@@ -297,28 +413,54 @@ class ChatWebSocket(WebSocket):
             'id'     : target_id,
             'status' : 'success'
         }
+
+    def rooms(self, _):
+        return {'rooms': [1, 2]} # return room ids
         
-    def message(self, data):
-        target_type = data['type']
+    def create_room(self, _): pass
+        
+    def destory_room(self, _): pass
+
+    def members(self, data):
+        pass
+
+    def history(self, data):
+        pass
+        
+    def _message(self, data, msg):
+        ''' Send message/typing to room or user(session) '''
+        target_type = data['type'] # room, user(session)
         target_id = int(data['id'])
 
-        msg = {
-            'path': 'message',
-            'type': 'message',
-            'body': data['body']
-        }
-        ret = self.redis.publish('%s-%d'%(target_type, target_id), json.dumps(msg))
+        channel = None
+        if target_type == 'room':
+            channel = 'room-%d'%(target_type, target_id)
+        elif target_type == 'user':
+            user = self.connected_users[target_id]
+            session_id = user['session_id']
+            channel = 'session-%d'%session_id
+            
+        ret = self.redis.publish(channel, json.dumps(msg))
         return {
-            'type': 'message',
             'target': target_type,
             'id': target_id,
             'ret': ret,
             'status': 'success'
         }
         
+    def message(self, data):
+        msg = {
+            'path': data['path'],
+            'body': data['body']
+        }
+        return self._message(data, msg)
         
     def typing(self, data):
-        pass
+        msg = {
+            'path': data['path'],
+            'typing': data['typing'] # True | False
+        }
+        return self._message(data, msg)
 
     ### API methods END ###
 

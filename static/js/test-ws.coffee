@@ -6,7 +6,7 @@ $(document).ready () ->
         data = JSON.parse message.data
         console.log data
         switch data.path
-            when 'init_client'
+            when 'create_client'
                 msg = {path:'online'}
                 msg.token = data.token
                 ws.send (JSON.stringify msg)
@@ -30,4 +30,4 @@ $(document).ready () ->
                 console.log 'Message.type:', data.type
 
     ws.onopen = () ->
-        ws.send (JSON.stringify {path: 'init_client'})
+        ws.send (JSON.stringify {path: 'create_client'})

@@ -8,7 +8,7 @@ $(document).ready(function() {
     data = JSON.parse(message.data);
     console.log(data);
     switch (data.path) {
-      case 'init_client':
+      case 'create_client':
         msg = {
           path: 'online'
         };
@@ -48,7 +48,7 @@ $(document).ready(function() {
   };
   return ws.onopen = function() {
     return ws.send(JSON.stringify({
-      path: 'init_client'
+      path: 'create_client'
     }));
   };
 });
