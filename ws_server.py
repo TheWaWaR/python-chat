@@ -15,41 +15,19 @@ import redis
 pool = redis.ConnectionPool(connection_class=redis.UnixDomainSocketConnection,
                             path='/tmp/redis.sock')
 
-
-
-class Session(object):
-    K_SESSIONS = 'sessions' # Active sessions
-    K_SESSIONS_ID = 'sessions:id'
-    
-    def __init__(self, rd, oid, channel):
-        self.rd = rd
-        self.oid = oid
-        self.channel = channel
-        self.KEY = 'session:%d'%self.oid
-        
-    @staticmethod
-    def create(rd):
-        oid = rd.incr(Session.K_SESSIONS_ID)
-        channel = 'session-%d'%oid
-        session = Session(rd, oid)
-        rd.hset(session.KEY, 'oid', oid) 
-        rd.hset(session.KEY, 'channel', channel) 
-        return session
-
-    def destory(self):
-        # remove from users' sessions
-#         self.rd.delete(self.KEY)
-
+class Visitor(object):
+    pass
 
 class User(object):
     K_USERS = 'users' # Active users
     K_USERS_ID = 'users:id'
+    K_USERS_TOKEN = 'users:token' # Hash table: token ==> uid
     
     def __init__(self, rd, oid, name):
         self.rd = rd
         self.oid = oid
         self.name = name
-        self.KEY = 'user:%d'%self.oid
+        self.KEY = User.key(oid)
 
     def destory(self):
         self.rd.delete(self.KEY) # Seems won't happen for now
@@ -60,20 +38,41 @@ class User(object):
     def offline(self):
         self.rd.hdel(User.K_USERS, self.oid)
         
-    def join_room(self, rid):
-        pass
+    # def join_room(self, rid):
+    #     Room.push(self.rd, rid, self.oid)
         
-    def leave_room(self, rid):
-        pass
-        
+    # def leave_room(self, rid):
+    #     Room.pop(self.rd, rid, self.oid)
+
+    @staticmethod
+    def key(uid): return 'user:%d'%uid
+    
     @staticmethod
     def create(rd, name):
         oid = rd.incr(User.K_USERS_ID)
+        # init_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         user = User(rd, oid, name)
         rd.hset(user.KEY, 'oid', oid)
         rd.hset(user.KEY, 'name', name)
-        return user
+        # rd.hset(user.KEY, 'init_at', init_at)
 
+        token = hashlib.sha1(os.urandom(64)).hexdigest()
+        rd.hset(User.K_USERS_TOKEN, token, oid)
+        
+        return token
+
+    @staticmethod
+    def load_by_id(rd, uid):
+        ''' Only for get other user's information '''
+        data = rd.hgetall(User.key(uid))
+        return User(rd, data['oid'], data['name'])
+
+    @staticmethod
+    def load_by_token(rd, token):
+        ''' Must called by current user '''
+        uid = rd.hget(User.K_USERS_TOKEN, token)
+        return User.load_by_id(rd, uid)
+    
     @staticmethod
     def is_online(rd, uid):
         return rd.hexists(User.K_USERS, uid)
@@ -82,18 +81,20 @@ class User(object):
     def online_users(rd):
         return rd.hkeys(User.K_USERS)
 
+class Group(object):
+    pass
         
 class Room(object):
     K_ROOMS = 'rooms' # Active rooms
-    K_ROOMS_ID = 'rooms:id'
+    K_ROOMS_ID = 'rooms:id' # Int: next room id
     
     def __init__(self, rd, oid, name, channel):
         self.rd = rd
         self.oid = oid
         self.name = name
         self.channel = channel
-        self.KEY = 'room:%d'%self.oid # Object key
-        self.KEY_MEMBERS = 'room:%d:members'%self.oid # Member list key
+        self.KEY = Room.key(oid) # Object key
+        self.KEY_MEMBERS = Room.key_members # Member list key
 
     @staticmethod
     def create(rd, name):
@@ -106,23 +107,35 @@ class Room(object):
         return room
 
     def destory(self):
+        ''' unused for now '''
         self.rd.delete(self.KEY)
 
     @staticmethod
-    def members_key(rid):
-        return 'room:%d:members'%rid
+    def key(rid): return 'room:%d'%rid # Hash table: field ==> value
         
     @staticmethod
+    def key_members(rid): return 'room:%d:members'%rid # Hash table: uid ==> True
+
+    @staticmethod
+    def load_by_id(rd, rid):
+        data = rd.hgetall(Room.key(rid))
+        return Room(rd, data['oid'], data['name'], data['channel'])
+        
+    @staticmethod
+    def ids(rd):
+        return rd.lrange(Room.K_ROOMS, 0, -1)
+    
+    @staticmethod
     def members(rd, rid):
-        return rd.hkeys(Room.members_key(rid))
+        return rd.hkeys(Room.key_members(rid))
 
     @staticmethod
     def push(rd, rid, uid):
-        return rd.hset(Room.members_key(rid), uid, True)
+        return rd.hset(Room.key_members(rid), uid, True)
 
     @staticmethod
     def pop(rd, rid, uid):
-        return rd.hdel(Room.members_key(rid), uid)
+        return rd.hdel(Room.key_members(rid), uid)
         
 
 class ChatWebSocket(WebSocket):
@@ -136,10 +149,9 @@ class ChatWebSocket(WebSocket):
         self.greenlets = {}
         self.pubsubs = {}
         self.queues = {}
-        self.connected_users = {} # {'id': uid, 'session_id': session_id}
+        self.connected_users = {} # {'id': uid}
         self.connected_rooms = {} # {'id': rid}
         
-        self.uid = None
         # Start global channels
         for name in ChatWebSocket.keep_channels:
             self.subscribe(name)
@@ -147,6 +159,7 @@ class ChatWebSocket(WebSocket):
         print 'Opened!'
 
     def closed(self, code, reason=None):
+        
         print 'Start closing......'
         # 1. Unsubscribe global channels
         print '1. Unsubscribe global channels'
@@ -156,7 +169,7 @@ class ChatWebSocket(WebSocket):
         offline_msg = {
             'path': 'presence',
             'action': 'offline',
-            'uid': self.uid
+            'uid': self.user.oid
         }
         # 2. Unsubscribe users
         print '2. Unsubscribe users'
@@ -194,16 +207,16 @@ class ChatWebSocket(WebSocket):
             'create_client' : self.create_client,
             'online'        : self.online,     # aka: Login 
             'offline'       : self.offline,    # :HOLD:
-            'connect'       : self.connect,    # Room or user(session)
-            'disconnect'    : self.disconnect, # Room or user(session)
             # Room
             'rooms'         : self.rooms,       # List available rooms
             'create_room'   : self.create_room, # 
             'destory_room'  : self.destory_room, # NOTE: Owner/Admin only
             'members'       : self.members, # Get user list by room id
+            'join'          : self.join,    # Join room
+            'leave'         : self.leave,   # Leave room
             # Message
             'history'       : self.history, # Get message history
-            'message'       : self.message, # Send message to room or user(session)
+            'message'       : self.message, # Send message to room or user(mailbox)
             'typing'        : self.typing,
             # 'presence'      : self.presence, # current user online/offline
         }
@@ -229,13 +242,17 @@ class ChatWebSocket(WebSocket):
     # ==============================================================================
     #  Gevent stuff
     # ==============================================================================
-    def unsubscribe(self, channel):
+    def unsubscribe(self, target_type, target_id):
+        channel = '%s-%d' % (target_type, target_id)
+        
         pubsub = self.pubsubs.pop(channel)
         greenlet = self.greenlets.pop(channel)
         pubsub.unsubscribe(channel)
         greenlet.join()
 
-    def subscribe(self, channel):
+    def subscribe(self, target_type, target_id):
+        channel = '%s-%d' % (target_type, target_id)
+        
         print 'Start channel:', channel
         pubsub = self.redis.pubsub()
         self.pubsubs[channel] = pubsub
@@ -283,27 +300,8 @@ class ChatWebSocket(WebSocket):
     
                 data = json.loads(msg['data'])
                 path = data['path']
-                if path == 'session':
-                    action = data['action']
-                    from_id = data['from_id']
-                    # Create session
-                    if action == 'create':
-                        if from_id in self.connected_users:
-                            print '%d already connected!' % from_id
-                        else:
-                            session_id = data['session_id']
-                            session_key = 'session-%d'%session_id
-                            self.subscribe(session_key)
-                            self.connected_users[from_id] = {
-                                'id': from_id,
-                                'session_id': session_id
-                            }
-                    # Destory session
-                    elif action == 'destory':
-                        user = self.connected_users.pop(from_id)
-                        session_id = user['session_id']
-                        session_key = 'session-%d'%session_id
-                        self.unsubscribe(session_key)
+                if path == 'message':
+                    pass
                 elif path == 'presence':
                     pass
                 else:
@@ -318,111 +316,48 @@ class ChatWebSocket(WebSocket):
     #  API methods
     # ==============================================================================
     def create_client(self, _):
-        token = hashlib.sha1(os.urandom(64)).hexdigest()
-        uid = self.redis.incr(K_USERS_ID)
-        init_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        self.redis.set('users:%s'%token, uid)
-        self.redis.hset('users:%d'%uid, 'init_at', init_at)
+        token = User.create(self.redis, '{Name}')
         return {'token': token}
 
     def online(self, data):
         token = data['token']
-        uid = int(self.redis.get('users:%s'%token))
-        init_at = self.redis.hget('users:%d'%uid, 'init_at')
-        user_key = 'user-%d' % uid
-        self.uid = uid
+        self.user = User.load_by_token(token)
         # Current user's mail box
-        self.subscribe(user_key)
-        return {
-            'uid': str(uid),
-            'init_at': init_at
-        }
+        self.subscribe('user', self.user.oid)
+        return { 'uid': self.user.oid }
         
     def offline(self, _):
         # Equal to `closed` ???
         pass
 
-    def connect(self, data):
-        ''' Connect to room or user '''
-        target_type = data['type']
-        target_id = int(data['id'])
+    def join(self, data):
+        ''' Join to room '''
+        rid = int(data['id'])
+        Room.push(self.redis, rid, self.user.oid)
+        self.subscribe('room', rid)
+        return { 'status' : 'success' }
         
-        if target_type == 'room':
-            room_key = 'room-%d' % target_id
-            self.subscribe(room_key)
-            room_online_msg = {
-                'path': 'presence',
-                'action': 'online',
-                'uid': self.uid
-            }
-            self.redis.publish(room_key, json.dumps(room_online_msg))
-            self.connected_rooms[target_id]= {'id': target_id}
-            
-        elif target_type == 'user':
-            target_user_key = 'user-%d' % target_id
-            session_id = self.redis.incr(K_SESSIONS_ID)
-            session_key = 'session-%d' % session_id
-            create_session_msg = {
-                'path': 'session',
-                'action': 'create', # Create
-                'from_id': self.uid,
-                'session_id': session_id,
-            }
-            # Mail to target user new session
-            self.redis.publish(target_user_key, json.dumps(create_session_msg))
-            self.subscribe(session_key)
-            self.connected_users[target_id] = {
-                'id': target_id,
-                'session_id': session_id
-            }
-        return {
-            'type'   : target_type,
-            'id'     : target_id,
-            'status' : 'success'
-        }
-        
-    def disconnect(self, data):
-        ''' Disconnect to room or user '''
-        target_type = data['type']
-        target_id = int(data['id'])
-            
-        if target_type == 'room':
-            if target_id in self.connected_rooms:
-                room_key = 'room-%d' % target_id
-                self.unsubscribe(room_key)
-                self.connected_rooms.pop(target_id)
-                print '%s disconnected!' % room_key
-            
-        elif target_type == 'user':
-            if target_id in self.connected_users:
-                user = self.connected_users[target_id]
-                target_user_key = 'user-%d' % target_id
-                session_id = user['session_id']
-                session_key = 'session-%d' % session_id
-                msg = {
-                    'path': 'session',
-                    'action': 'destory', # Destory
-                    'from_id': self.uid,
-                }
-                self.redis.publish(target_user_key, json.dumps(msg)) # Mail to target user destory session
-                self.unsubscribe(session_key)
-                self.connected_users.pop(target_id)
-                print '%s,%s disconnected!' % (session_key, target_user_key)
-        return {
-            'type'   : target_type,
-            'id'     : target_id,
-            'status' : 'success'
-        }
+    def leave(self, data):
+        ''' Leave a room '''
+        rid = int(data['id'])
+        self.unsubscribe('room', rid)
+        Room.pop(self.redis, rid, self.user.oid)
+        return { 'status' : 'success' }
 
     def rooms(self, _):
-        return {'rooms': [1, 2]} # return room ids
+        rids = Room.ids(self.redis)
+        records = [self.redis.hgetall(Room.key(rid)) for rid in rids]
+        return {'rooms': records } # return rooms
         
     def create_room(self, _): pass
         
     def destory_room(self, _): pass
 
     def members(self, data):
-        pass
+        rid = int(data['rid'])
+        uids = Room.members(self.redis, rid)
+        users = [self.redis.hgetall(User.key(uid)) for uid in uids]
+        return {'members': users}
 
     def history(self, data):
         pass
@@ -432,14 +367,9 @@ class ChatWebSocket(WebSocket):
         target_type = data['type'] # room, user(session)
         target_id = int(data['id'])
 
-        channel = None
-        if target_type == 'room':
-            channel = 'room-%d'%(target_type, target_id)
-        elif target_type == 'user':
-            user = self.connected_users[target_id]
-            session_id = user['session_id']
-            channel = 'session-%d'%session_id
-            
+        channel = '%s-%d' % (target_type, target_id)
+        msg['path'] = data['path']
+        msg['from'] = self.uid
         ret = self.redis.publish(channel, json.dumps(msg))
         return {
             'target': target_type,
@@ -449,17 +379,11 @@ class ChatWebSocket(WebSocket):
         }
         
     def message(self, data):
-        msg = {
-            'path': data['path'],
-            'body': data['body']
-        }
+        msg = { 'body': data['body'] }
         return self._message(data, msg)
         
     def typing(self, data):
-        msg = {
-            'path': data['path'],
-            'typing': data['typing'] # True | False
-        }
+        msg = { 'typing': data['typing'] } # True | False
         return self._message(data, msg)
 
     ### API methods END ###
