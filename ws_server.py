@@ -24,8 +24,9 @@ class User(object):
     K_USERS_TOKEN = 'users:token' # Hash table: token ==> uid
     
     def __init__(self, rd, oid, name):
+        oid = int(oid)
         self.rd = rd
-        self.oid = oid
+        self.oid = oid          # hget return a `str`
         self.name = name
         self.KEY = User.key(oid)
 
@@ -71,7 +72,7 @@ class User(object):
     def load_by_token(rd, token):
         ''' Must called by current user '''
         uid = rd.hget(User.K_USERS_TOKEN, token)
-        return User.load_by_id(rd, uid)
+        return User.load_by_id(rd, int(uid))
     
     @staticmethod
     def is_online(rd, uid):
@@ -89,6 +90,7 @@ class Room(object):
     K_ROOMS_ID = 'rooms:id' # Int: next room id
     
     def __init__(self, rd, oid, name, channel):
+        oid = int(oid)
         self.rd = rd
         self.oid = oid
         self.name = name
@@ -154,7 +156,7 @@ class ChatWebSocket(WebSocket):
         
         # Start global channels
         for name in ChatWebSocket.keep_channels:
-            self.subscribe(name)
+            self.subscribe(name, 0)
         
         print 'Opened!'
 
@@ -164,7 +166,7 @@ class ChatWebSocket(WebSocket):
         # 1. Unsubscribe global channels
         print '1. Unsubscribe global channels'
         for g_key in ChatWebSocket.keep_channels:
-            self.unsubscribe(g_key)
+            self.unsubscribe(g_key, 0)
             
         offline_msg = {
             'path': 'presence',
@@ -175,19 +177,19 @@ class ChatWebSocket(WebSocket):
         print '2. Unsubscribe users'
         for uid in self.connected_users:
             user_key = 'user-%d'%uid
-            self.unsubscribe(user_key)
+            self.unsubscribe('user', uid)
             self.redis.publish(user_key, json.dumps(offline_msg))
 
         # 3. Unsubscribe rooms
         print '3. Unsubscribe rooms'
         for rid in self.connected_rooms:
             room_key = 'room-%d'%rid
-            self.unsubscribe(room_key)
+            self.unsubscribe('room', rid)
             self.redis.publish(room_key, json.dumps(offline_msg))
 
         # 4. Unsubscribe current user's mailbox
         print '4. Unsubscribe current user\'s mailbox'
-        self.unsubscribe('user-%d'%self.uid)
+        self.unsubscribe('user', self.user.oid)
 
         print 'Check:', self.greenlets
         print 'Check:', self.pubsubs
@@ -321,9 +323,10 @@ class ChatWebSocket(WebSocket):
 
     def online(self, data):
         token = data['token']
-        self.user = User.load_by_token(token)
+        self.user = User.load_by_token(self.redis, token)
         # Current user's mail box
         self.subscribe('user', self.user.oid)
+        print 'Onlined'
         return { 'uid': self.user.oid }
         
     def offline(self, _):
