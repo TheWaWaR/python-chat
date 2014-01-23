@@ -33,9 +33,8 @@ chatApp.factory("ChatService", function() {
 chatApp.controller("Ctrl", [
   '$scope', 'ChatService', function($scope, ChatService) {
     $scope.templateUrl = "/static/partials/ws4py.html";
-    $scope.messages = [];
-    $scope.cids = [];
-    $scope.members = {};
+    $scope.rooms = [];
+    $scope.users = [];
     ChatService.setOnopen(function() {
       ws.send(JSON.stringify({
         path: 'create_client'
@@ -56,21 +55,15 @@ chatApp.controller("Ctrl", [
           break;
         case 'online':
           msg = {
-            path: 'groups'
+            path: 'rooms'
           };
           ws.send(JSON.stringify(msg));
           break;
-        case 'groups':
-          _ref = data.groups;
+        case 'rooms':
+          _ref = data.rooms;
           for (_i = 0, _len = _ref.length; _i < _len; _i++) {
             rid = _ref[_i];
-            groups.push(rid);
-            msg = {
-              path: 'connect'
-            };
-            msg.type = 'group';
-            msg.id = rid;
-            ws.send(JSON.stringify(msg));
+            $scope.rooms.push(rid);
           }
           break;
         case 'connect':
@@ -78,7 +71,7 @@ chatApp.controller("Ctrl", [
             path: 'message'
           };
           msg.type = data.type;
-          msg.id = data.id;
+          msg.oid = data.id;
           msg.body = "From: " + data.id;
           ws.send(JSON.stringify(msg));
           break;

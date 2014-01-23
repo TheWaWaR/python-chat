@@ -1,0 +1,135 @@
+
+/**** . Create Client ****/
+// Send
+{'path': 'create_client'}
+
+// Receive
+{
+    'path': 'create_client',
+    'token': '{some-hex-str}'
+}
+
+
+/**** . User online ****/
+// Send
+{'path': 'online'}
+
+// Receive
+{
+    'path': 'online',
+    'user': {'id': '{user.id}', 'name': '{name}'}
+}
+
+
+/**** . User offline ****/
+// Send
+{'path': 'offline'}
+// Receive
+{'path': 'offline'}
+
+
+
+/**** . List global rooms  ****/
+// Send
+{'path': 'rooms'}
+// Receive
+{
+    'path': 'rooms'
+    'rooms': [{'id': '{room.id}', 'name': '{name}'}, '...']
+}
+
+
+
+/**** . Create a global room(admin only) ****/
+// Send
+{
+    'path': 'create_room',
+    'name': '{some-name}'
+}
+// Receive
+{
+    'path': 'create_room',
+    'id': '{room.id}',
+}
+
+
+/**** . Destory a global room(admin only) ****/
+// Send
+{'path': 'destory_room', 'id': '{room.id}'}
+// Send
+{
+    'path': 'destory_room',
+    'id': '{room.id}',
+}
+
+
+/**** . List all users by room id ****/
+// Send
+{'path': 'members', 'id': '{room.id}'}
+// Receive
+{
+    'path': 'members',
+    'id': '{room.id}',
+    'users': [{'id': '0', 'name': 'user-0'}, '...']
+}
+
+
+/**** . Join a room ****/
+// Send
+{'path': 'join', 'id': '{room.id}'}
+// Receive
+{
+    'path': 'join',
+    'id': '{room.id}',
+}
+
+
+/**** . Leave a room ****/
+// Send
+{'path': 'leave', 'id': '{room.id}'}
+// Receive
+{
+    'path': 'leave',
+    'id': '{room.id}'
+}
+
+
+
+/**** . Get history of room/user ****/
+// Send
+{'path': 'history', 'type': '{room||user}', 'oid': '{rid||uid}'}
+// Send
+{
+    'path': 'history',
+    'type': '{room||user}',
+    'oid': '{rid||uid}',
+    'messages': [{'from': '{user.id}', 'body': '{body}', 'datetime': '{datetime}'}, '...']
+}
+
+
+/**** . Send message to room/user(mailbox)  ****/
+// Send
+{
+    'path': 'message',
+    'type': '{room||user}',       // target_type
+    'oid': '{rid||uid}',          // target_id
+    'body': '{message.body}'
+}
+// Receive
+{
+    'path': 'message',
+    'type': '{room||user}',       // target_type
+    'oid': '{rid||uid}',          // target_id
+    'status': 'ok||timeout||...'
+}
+
+
+/**** . Send typing notification to room/user(mailbox)  ****/
+// Send
+{
+    'path': 'typing',
+    'type': '{room||user}',       // target_type
+    'oid': '{rid||uid}',          // target_id
+    'typing': '{True||False}'
+}
+// Receive, No

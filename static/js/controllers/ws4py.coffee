@@ -26,9 +26,8 @@ chatApp.factory "ChatService", ()->
     
 chatApp.controller "Ctrl", ['$scope', 'ChatService', ($scope, ChatService) ->
     $scope.templateUrl = "/static/partials/ws4py.html"
-    $scope.messages = []
-    $scope.cids = []
-    $scope.members = {}
+    $scope.rooms = []
+    $scope.users = []
 
     ChatService.setOnopen () ->
         ws.send (JSON.stringify {path: 'create_client'})
@@ -43,19 +42,15 @@ chatApp.controller "Ctrl", ['$scope', 'ChatService', ($scope, ChatService) ->
                 msg.token = data.token
                 ws.send (JSON.stringify msg)
             when 'online'
-                msg = {path:'groups'}
+                msg = {path:'rooms'}
                 ws.send (JSON.stringify msg)
-            when 'groups'
-                for rid in data.groups
-                    groups.push rid
-                    msg = {path:'connect'}
-                    msg.type = 'group'
-                    msg.id = rid
-                    ws.send (JSON.stringify msg)
+            when 'rooms'
+                for rid in data.rooms
+                    $scope.rooms.push rid
             when 'connect'
                 msg = {path:'message'}
                 msg.type = data.type
-                msg.id = data.id
+                msg.oid = data.id
                 msg.body = "From: #{data.id}"
                 ws.send (JSON.stringify msg)
             when 'message'
