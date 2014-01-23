@@ -1,4 +1,6 @@
 
+
+
 $(document).ready () ->
     rooms = [];
     ws = new WebSocket "ws://#{location.hostname}:9000"

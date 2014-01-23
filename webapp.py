@@ -19,6 +19,13 @@ WS_DICT = {}
 rand = Random()
 
 
+
+@app.route('/ws4py')
+def ws4py():
+    return render_template('ws4py.html')
+
+
+#####
 @app.route('/')
 def index():
     cid = session.get('cid', None)

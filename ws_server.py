@@ -39,11 +39,11 @@ class User(object):
     def offline(self):
         self.rd.hdel(User.K_USERS, self.oid)
         
-    # def join_room(self, rid):
-    #     Room.push(self.rd, rid, self.oid)
+    # def join_group(self, rid):
+    #     Group.push(self.rd, rid, self.oid)
         
-    # def leave_room(self, rid):
-    #     Room.pop(self.rd, rid, self.oid)
+    # def leave_group(self, rid):
+    #     Group.pop(self.rd, rid, self.oid)
 
     @staticmethod
     def key(uid): return 'user:%d'%uid
@@ -85,9 +85,9 @@ class User(object):
 class Group(object):
     pass
         
-class Room(object):
-    K_ROOMS = 'rooms' # Active rooms
-    K_ROOMS_ID = 'rooms:id' # Int: next room id
+class Group(object):
+    K_GROUPS = 'groups' # Active groups
+    K_GROUPS_ID = 'groups:id' # Int: next group id
     
     def __init__(self, rd, oid, name, channel):
         oid = int(oid)
@@ -95,49 +95,49 @@ class Room(object):
         self.oid = oid
         self.name = name
         self.channel = channel
-        self.KEY = Room.key(oid) # Object key
-        self.KEY_MEMBERS = Room.key_members # Member list key
+        self.KEY = Group.key(oid) # Object key
+        self.KEY_MEMBERS = Group.key_members # Member list key
 
     @staticmethod
     def create(rd, name):
-        oid = rd.incr(Room.K_ROOMS_ID)
-        channel = 'room-%d' % oid
-        room = Room(rd, oid, name, channel)
-        rd.hset(room.KEY, 'oid', oid) 
-        rd.hset(room.KEY, 'name', name)
-        rd.hset(room.KEY, 'channel', channel)
-        return room
+        oid = rd.incr(Group.K_GROUPS_ID)
+        channel = 'group-%d' % oid
+        group = Group(rd, oid, name, channel)
+        rd.hset(group.KEY, 'oid', oid) 
+        rd.hset(group.KEY, 'name', name)
+        rd.hset(group.KEY, 'channel', channel)
+        return group
 
     def destory(self):
         ''' unused for now '''
         self.rd.delete(self.KEY)
 
     @staticmethod
-    def key(rid): return 'room:%d'%rid # Hash table: field ==> value
+    def key(rid): return 'group:%d'%rid # Hash table: field ==> value
         
     @staticmethod
-    def key_members(rid): return 'room:%d:members'%rid # Hash table: uid ==> True
+    def key_members(rid): return 'group:%d:members'%rid # Hash table: uid ==> True
 
     @staticmethod
     def load_by_id(rd, rid):
-        data = rd.hgetall(Room.key(rid))
-        return Room(rd, data['oid'], data['name'], data['channel'])
+        data = rd.hgetall(Group.key(rid))
+        return Group(rd, data['oid'], data['name'], data['channel'])
         
     @staticmethod
     def ids(rd):
-        return rd.lrange(Room.K_ROOMS, 0, -1)
+        return rd.lrange(Group.K_GROUPS, 0, -1)
     
     @staticmethod
     def members(rd, rid):
-        return rd.hkeys(Room.key_members(rid))
+        return rd.hkeys(Group.key_members(rid))
 
     @staticmethod
     def push(rd, rid, uid):
-        return rd.hset(Room.key_members(rid), uid, True)
+        return rd.hset(Group.key_members(rid), uid, True)
 
     @staticmethod
     def pop(rd, rid, uid):
-        return rd.hdel(Room.key_members(rid), uid)
+        return rd.hdel(Group.key_members(rid), uid)
         
 
 class ChatWebSocket(WebSocket):
@@ -152,7 +152,7 @@ class ChatWebSocket(WebSocket):
         self.pubsubs = {}
         self.queues = {}
         self.connected_users = {} # {'id': uid}
-        self.connected_rooms = {} # {'id': rid}
+        self.connected_groups = {} # {'id': rid}
         
         # Start global channels
         for name in ChatWebSocket.keep_channels:
@@ -180,12 +180,12 @@ class ChatWebSocket(WebSocket):
             self.unsubscribe('user', uid)
             self.redis.publish(user_key, json.dumps(offline_msg))
 
-        # 3. Unsubscribe rooms
-        print '3. Unsubscribe rooms'
-        for rid in self.connected_rooms:
-            room_key = 'room-%d'%rid
-            self.unsubscribe('room', rid)
-            self.redis.publish(room_key, json.dumps(offline_msg))
+        # 3. Unsubscribe groups
+        print '3. Unsubscribe groups'
+        for rid in self.connected_groups:
+            group_key = 'group-%d'%rid
+            self.unsubscribe('group', rid)
+            self.redis.publish(group_key, json.dumps(offline_msg))
 
         # 4. Unsubscribe current user's mailbox
         print '4. Unsubscribe current user\'s mailbox'
@@ -209,16 +209,16 @@ class ChatWebSocket(WebSocket):
             'create_client' : self.create_client,
             'online'        : self.online,     # aka: Login 
             'offline'       : self.offline,    # :HOLD:
-            # Room
-            'rooms'         : self.rooms,       # List available rooms
-            'create_room'   : self.create_room, # 
-            'destory_room'  : self.destory_room, # NOTE: Owner/Admin only
-            'members'       : self.members, # Get user list by room id
-            'join'          : self.join,    # Join room
-            'leave'         : self.leave,   # Leave room
+            # Group
+            'groups'         : self.groups,       # List available groups
+            'create_group'   : self.create_group, # 
+            'destory_group'  : self.destory_group, # NOTE: Owner/Admin only
+            'members'       : self.members, # Get user list by group id
+            'join'          : self.join,    # Join group
+            'leave'         : self.leave,   # Leave group
             # Message
             'history'       : self.history, # Get message history
-            'message'       : self.message, # Send message to room or user(mailbox)
+            'message'       : self.message, # Send message to group or user(mailbox)
             'typing'        : self.typing,
             # 'presence'      : self.presence, # current user online/offline
         }
@@ -334,31 +334,31 @@ class ChatWebSocket(WebSocket):
         pass
 
     def join(self, data):
-        ''' Join to room '''
+        ''' Join to group '''
         rid = int(data['id'])
-        Room.push(self.redis, rid, self.user.oid)
-        self.subscribe('room', rid)
+        Group.push(self.redis, rid, self.user.oid)
+        self.subscribe('group', rid)
         return { 'status' : 'success' }
         
     def leave(self, data):
-        ''' Leave a room '''
+        ''' Leave a group '''
         rid = int(data['id'])
-        self.unsubscribe('room', rid)
-        Room.pop(self.redis, rid, self.user.oid)
+        self.unsubscribe('group', rid)
+        Group.pop(self.redis, rid, self.user.oid)
         return { 'status' : 'success' }
 
-    def rooms(self, _):
-        rids = Room.ids(self.redis)
-        records = [self.redis.hgetall(Room.key(rid)) for rid in rids]
-        return {'rooms': records } # return rooms
+    def groups(self, _):
+        rids = Group.ids(self.redis)
+        records = [self.redis.hgetall(Group.key(rid)) for rid in rids]
+        return {'groups': records } # return groups
         
-    def create_room(self, _): pass
+    def create_group(self, _): pass
         
-    def destory_room(self, _): pass
+    def destory_group(self, _): pass
 
     def members(self, data):
         rid = int(data['rid'])
-        uids = Room.members(self.redis, rid)
+        uids = Group.members(self.redis, rid)
         users = [self.redis.hgetall(User.key(uid)) for uid in uids]
         return {'members': users}
 
@@ -366,8 +366,8 @@ class ChatWebSocket(WebSocket):
         pass
         
     def _message(self, data, msg):
-        ''' Send message/typing to room or user(session) '''
-        target_type = data['type'] # room, user(session)
+        ''' Send message/typing to group or user(session) '''
+        target_type = data['type'] # group, user(session)
         target_id = int(data['id'])
 
         channel = '%s-%d' % (target_type, target_id)

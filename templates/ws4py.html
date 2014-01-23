@@ -1,0 +1,24 @@
+<!DOCTYPE HTML>
+<html ng-app="chatApp">                                                                           
+  <head>                                                                           
+    <title>{{ cid }}</title>
+    <link rel="stylesheet" href="/static/css/bootstrap.css" type="text/css" media="screen" />
+    <link rel="stylesheet" href="/static/css/gh-fork-ribbon.css" type="text/css" media="screen" />
+    
+    <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js"></script>
+    <script type="text/javascript" src="/static/js/bootstrap.js"></script>
+  </head>                                                                          
+  <body ng-controller="Ctrl">
+    <div class="github-fork-ribbon-wrapper left">
+      <div class="github-fork-ribbon">
+        <a href="https://github.com/TheWaWaR/python-websocket-demos">Fork me on GitHub</a>
+      </div>
+    </div>
+
+    <div id="main" ng-include="templateUrl"> </div>
+  </body>
+  
+  <script type="text/javascript" src="/static/js/libs/angular/angular.js"></script>
+  <script type="text/javascript" charset="utf-8" src="/static/js/controllers/ws4py.js"></script>
+
+</html>                                  
