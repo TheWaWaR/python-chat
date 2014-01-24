@@ -34,7 +34,24 @@ chatApp.controller("Ctrl", [
   '$scope', 'ChatService', function($scope, ChatService) {
     $scope.templateUrl = "/static/partials/ws4py.html";
     $scope.rooms = [];
-    $scope.users = [];
+    $scope.members = {};
+    $scope.users = {};
+    $scope.visitors = {};
+    $scope.send = function(type, id) {
+      var body, msg;
+      body = this.text;
+      if (body.length > 0) {
+        msg = {
+          path: 'message',
+          type: type,
+          id: id,
+          body: body
+        };
+        console.log('send:', msg);
+        ws.send(JSON.stringify(msg));
+        return this.text = "";
+      }
+    };
     ChatService.setOnopen(function() {
       ws.send(JSON.stringify({
         path: 'create_client'
@@ -42,9 +59,9 @@ chatApp.controller("Ctrl", [
       return console.log('Opened');
     });
     ChatService.setOnmessage(function(event) {
-      var data, msg, rid, _i, _len, _ref;
+      var data, member, msg, room, _i, _j, _len, _len1, _ref, _ref1;
       data = JSON.parse(event.data);
-      console.log(data);
+      console.log('<<DATA>>:', data);
       switch (data.path) {
         case 'create_client':
           msg = {
@@ -60,22 +77,53 @@ chatApp.controller("Ctrl", [
           ws.send(JSON.stringify(msg));
           break;
         case 'rooms':
+          $scope.rooms = data.rooms;
           _ref = data.rooms;
           for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-            rid = _ref[_i];
-            $scope.rooms.push(rid);
+            room = _ref[_i];
+            msg = {
+              path: 'join',
+              id: room.oid
+            };
+            ws.send(JSON.stringify(msg));
+          }
+          console.log('rooms:', $scope.rooms);
+          break;
+        case 'join':
+          msg = {
+            path: 'members',
+            id: data.id
+          };
+          ws.send(JSON.stringify(msg));
+          console.log('Joined:', data);
+          break;
+        case 'members':
+          $scope.members[data.id] = {};
+          _ref1 = data.members;
+          for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
+            member = _ref1[_j];
+            $scope.members[data.id][member.oid] = member;
+          }
+          console.log('Get members:', $scope.members, data.members);
+          break;
+        case 'presence':
+          switch (data.type) {
+            case 'room':
+              switch (data.action) {
+                case 'join':
+                  $scope.members[data.id][data.member.oid] = data.member;
+                  break;
+                case 'leave':
+                  delete $scope.members[data.id][data.member.oid];
+              }
           }
           break;
-        case 'connect':
-          msg = {
-            path: 'message'
-          };
-          msg.type = data.type;
-          msg.oid = data.id;
-          msg.body = "From: " + data.id;
-          ws.send(JSON.stringify(msg));
-          break;
         case 'message':
+          switch (data.type) {
+            case 'room':
+              console.log('received message:', data);
+              $('#room-' + data.id).append("" + data.from + ": " + data.body + "<br />");
+          }
           console.log('Message.type:', data.type);
       }
       return $scope.$apply();
@@ -84,15 +132,3 @@ chatApp.controller("Ctrl", [
     return 'ok';
   }
 ]);
-
-$(document).ready(function() {
-  return $('form').submit(function(event) {
-    var msg;
-    msg = $('#message-input').val();
-    if (msg.length > 0) {
-      ws.send(msg);
-      $('#message-input').val("");
-    }
-    return false;
-  });
-});

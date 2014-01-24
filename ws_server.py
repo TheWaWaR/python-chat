@@ -56,6 +56,7 @@ class User(object):
     @staticmethod
     def create(rd, name):
         oid = rd.incr(User.K_USERS_ID)
+        oid = int(oid)
         # init_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         user = User(rd, oid, name)
         rd.hset(user.KEY, 'oid', oid)
@@ -106,6 +107,8 @@ class Room(object):
     @staticmethod
     def create(rd, name):
         oid = rd.incr(Room.K_ROOMS_ID)
+        oid = int(oid)
+        rd.lpush(Room.K_ROOMS, oid)
         channel = 'room-%d' % oid
         room = Room(rd, oid, name, channel)
         rd.hset(room.KEY, 'oid', oid) 
@@ -145,6 +148,11 @@ class Room(object):
         return rd.hdel(Room.key_members(rid), uid)
         
 
+rd = redis.StrictRedis(connection_pool=pool)
+for name in ('USA', 'China', 'Japan'):
+    print 'Create room:', name
+    Room.create(rd, name)
+
 class ChatWebSocket(WebSocket):
     keep_channels = ['system', ]
 
@@ -156,6 +164,7 @@ class ChatWebSocket(WebSocket):
         self.greenlets = {}
         self.pubsubs = {}
         self.queues = {}
+        self.connected_visitors = {} # {'id': uid}
         self.connected_users = {} # {'id': uid}
         self.connected_rooms = {} # {'id': rid}
         
@@ -189,7 +198,7 @@ class ChatWebSocket(WebSocket):
         print '3. Unsubscribe rooms'
         for rid in self.connected_rooms:
             room_key = 'room-%d'%rid
-            self.unsubscribe('room', rid)
+            self.leave({'id': rid})
             self.redis.publish(room_key, json.dumps(offline_msg))
 
         # 4. Unsubscribe current user's mailbox
@@ -252,6 +261,16 @@ class ChatWebSocket(WebSocket):
     def unsubscribe(self, target_type, target_id):
         channel = '%s-%d' % (target_type, target_id)
         
+        if target_type in ('room', 'group'):
+            leave_msg = {
+                'path': 'presence',
+                'action': 'leave',
+                'type': target_type,
+                'id': target_id,
+                'member': {'oid': self.user.oid }
+            }
+            self.redis.publish(channel, json.dumps(leave_msg))
+        
         pubsub = self.pubsubs.pop(channel)
         greenlet = self.greenlets.pop(channel)
         pubsub.unsubscribe(channel)
@@ -259,8 +278,19 @@ class ChatWebSocket(WebSocket):
 
     def subscribe(self, target_type, target_id):
         channel = '%s-%d' % (target_type, target_id)
+
+        if target_type in ('room', 'group'):
+            join_msg = {
+                'path': 'presence',
+                'action': 'join',
+                'type': target_type,
+                'id': target_id,
+                'member': {'oid': self.user.oid, 'name': self.user.name }
+            }
+            self.redis.publish(channel, json.dumps(join_msg))
         
-        print 'Start channel:', channel
+        
+        print 'Subscribe channel:', channel
         pubsub = self.redis.pubsub()
         self.pubsubs[channel] = pubsub
         pubsub.subscribe(channel)
@@ -271,13 +301,21 @@ class ChatWebSocket(WebSocket):
         def channel_processor():
             while True:
                 msg = queue.next()
-                if msg['type'] == 'unsubscribe':
+                msg_type = msg['type']
+                
+                if msg_type == 'subscribe':
+                    print 'subscribe to mailbox', self.user.oid
+                    continue
+                if msg_type  == 'unsubscribe':
                     print 'Exit channel:', channel
                     pubsub.close()
                     break
-                    
-                print 'Received message from redis:', msg
-                self.send(msg['data'])
+
+                print 'Received message from redis(channel):', msg
+                data = json.loads(msg['data'])
+                data['type'] = target_type
+                data['id'] = target_id
+                self.send(json.dumps(data))
                 
         self.greenlets[channel] = gevent.spawn(channel_processor)
 
@@ -285,7 +323,7 @@ class ChatWebSocket(WebSocket):
     def start_mailbox(self):
         ''' Current user's Mailbox '''
         
-        user_key = 'user-%d' % self.uid
+        user_key = 'user-%d' % self.user.oid
         if user_key in self.greenlets:
             print 'Mailbox already started!'
             
@@ -300,7 +338,11 @@ class ChatWebSocket(WebSocket):
         def mailbox_processer():
             while True:
                 msg = queue.next()
-                if msg['type'] == 'unsubscribe':
+                msg_type = msg['type']
+                if msg_type == 'subscribe':
+                    print 'subscribe to mailbox', self.user.oid
+                    continue
+                if msg_type == 'unsubscribe':
                     print 'Exit mail box:', user_key
                     pubsub.close()
                     break
@@ -314,8 +356,8 @@ class ChatWebSocket(WebSocket):
                 else:
                     raise ValueError('Mailbox received bad data:' % msg)
                     
-                print 'Received message from redis:', msg, type(msg)
-                # self.send(msg['data'])
+                print 'Received message from redis(mailbox):', msg, type(msg)
+                self.send(msg['data'])
         self.greenlets[user_key] = gevent.spawn(mailbox_processer)
 
         
@@ -323,14 +365,14 @@ class ChatWebSocket(WebSocket):
     #  API methods
     # ==============================================================================
     def create_client(self, _):
-        token = User.create(self.redis, '{Name}')
+        token = User.create(self.redis, 'USER-' + (hashlib.sha1(os.urandom(64)).hexdigest())[:6])
         return {'token': token}
 
     def online(self, data):
         token = data['token']
         self.user = User.load_by_token(self.redis, token)
         # Current user's mail box
-        self.subscribe('user', self.user.oid)
+        self.start_mailbox()
         print 'Onlined'
         return { 'uid': self.user.oid }
         
@@ -341,20 +383,23 @@ class ChatWebSocket(WebSocket):
     def join(self, data):
         ''' Join to room '''
         rid = int(data['id'])
+        print 'join(%d)' % rid
         Room.push(self.redis, rid, self.user.oid)
         self.subscribe('room', rid)
-        return { 'status' : 'success' }
+        self.connected_rooms[rid] =  None
+        return { 'status' : 'success', 'id': rid }
         
     def leave(self, data):
         ''' Leave a room '''
         rid = int(data['id'])
+        print 'leave(%d)' % rid
         self.unsubscribe('room', rid)
         Room.pop(self.redis, rid, self.user.oid)
         return { 'status' : 'success' }
 
     def rooms(self, _):
         rids = Room.ids(self.redis)
-        records = [self.redis.hgetall(Room.key(rid)) for rid in rids]
+        records = [self.redis.hgetall(Room.key(int(rid))) for rid in rids]
         return {'rooms': records } # return rooms
         
     def create_room(self, _): pass
@@ -362,10 +407,10 @@ class ChatWebSocket(WebSocket):
     def destory_room(self, _): pass
 
     def members(self, data):
-        rid = int(data['rid'])
+        rid = int(data['id'])
         uids = Room.members(self.redis, rid)
-        users = [self.redis.hgetall(User.key(uid)) for uid in uids]
-        return {'members': users}
+        users = [self.redis.hgetall(User.key(int(uid))) for uid in uids]
+        return {'members': users, 'id': rid}
 
     def history(self, data):
         pass
@@ -373,26 +418,23 @@ class ChatWebSocket(WebSocket):
     def _message(self, data, msg):
         ''' Send message/typing to room or user(session) '''
         target_type = data['type'] # room, user(session)
-        target_id = int(data['oid'])
+        target_id = int(data['id'])
 
         channel = '%s-%d' % (target_type, target_id)
         msg['path'] = data['path']
-        msg['from'] = self.uid
+        msg['from'] = self.user.oid
         ret = self.redis.publish(channel, json.dumps(msg))
-        return {
-            'target': target_type,
-            'id': target_id,
-            'ret': ret,
-            'status': 'success'
-        }
+        return {'status': 'ok'}
         
     def message(self, data):
+        print 'message.data:', data
         msg = { 'body': data['body'] }
         return self._message(data, msg)
         
     def typing(self, data):
         msg = { 'typing': data['typing'] } # True | False
         return self._message(data, msg)
+        
 
     ### API methods END ###
 

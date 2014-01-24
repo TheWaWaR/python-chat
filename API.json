@@ -1,19 +1,20 @@
 
-/**** . Create Client ****/
+/**** . Create Client for User ****/
 // Send
 {'path': 'create_client'}
-
 // Receive
 {
     'path': 'create_client',
-    'token': '{some-hex-str}'
+    'token': '{hex-str-token}'
 }
 
 
 /**** . User online ****/
 // Send
-{'path': 'online'}
-
+{
+    'path': 'online',
+    'token': '{hex-str-token}'
+}
 // Receive
 {
     'path': 'online',
@@ -21,7 +22,7 @@
 }
 
 
-/**** . User offline ****/
+/**** . User offline. :HOLD: ****/
 // Send
 {'path': 'offline'}
 // Receive
@@ -35,7 +36,7 @@
 // Receive
 {
     'path': 'rooms'
-    'rooms': [{'id': '{room.id}', 'name': '{name}'}, '...']
+    'rooms': [{'oid': '{room.oid}', 'name': '{name}'}, '...']
 }
 
 
@@ -70,7 +71,7 @@
 {
     'path': 'members',
     'id': '{room.id}',
-    'users': [{'id': '0', 'name': 'user-0'}, '...']
+    'members': [{'oid': '0', 'name': 'user-0'}, '...']
 }
 
 
@@ -97,13 +98,13 @@
 
 /**** . Get history of room/user ****/
 // Send
-{'path': 'history', 'type': '{room||user}', 'oid': '{rid||uid}'}
+{'path': 'history', 'type': '{room||user||visitor}', 'oid': '{rid||uid||vid}'}
 // Send
 {
     'path': 'history',
-    'type': '{room||user}',
-    'oid': '{rid||uid}',
-    'messages': [{'from': '{user.id}', 'body': '{body}', 'datetime': '{datetime}'}, '...']
+    'type': '{room||user||visitor}', // target_type
+    'id': '{rid||uid||vid}',
+    'messages': [{'from': '{user||visitor.oid}', 'body': '{body}', 'datetime': '{datetime}'}, '...']
 }
 
 
@@ -111,15 +112,17 @@
 // Send
 {
     'path': 'message',
-    'type': '{room||user}',       // target_type
-    'oid': '{rid||uid}',          // target_id
+    'type': '{room||user||visitor}', // target_type
+    'id': '{rid||uid||vid}',         // target_id(to)
     'body': '{message.body}'
 }
-// Receive
+// Receive, No
+// Then receive from channel
 {
     'path': 'message',
-    'type': '{room||user}',       // target_type
-    'oid': '{rid||uid}',          // target_id
+    'type': '{room||user||visitor}', // target_type
+    'from': '{rid||uid||vid}',       // target_id(from)
+    'body': '{message.body}',
     'status': 'ok||timeout||...'
 }
 
@@ -128,8 +131,8 @@
 // Send
 {
     'path': 'typing',
-    'type': '{room||user}',       // target_type
-    'oid': '{rid||uid}',          // target_id
+    'type': '{room||user||visitor}', // target_type
+    'id': '{rid||uid||vid}',         // target_id
     'typing': '{True||False}'
 }
 // Receive, No

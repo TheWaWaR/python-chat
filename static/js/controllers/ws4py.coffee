@@ -27,7 +27,19 @@ chatApp.factory "ChatService", ()->
 chatApp.controller "Ctrl", ['$scope', 'ChatService', ($scope, ChatService) ->
     $scope.templateUrl = "/static/partials/ws4py.html"
     $scope.rooms = []
-    $scope.users = []
+    $scope.members = {}
+    $scope.users = {}
+    $scope.visitors = {}
+
+    $scope.send = (type, id) ->
+        # body = $('#message-input-'+id).val()
+        body = this.text
+        if body.length > 0
+            msg = {path:'message', type:type, id: id, body: body}
+            console.log 'send:', msg
+            ws.send (JSON.stringify msg)
+            # $('#message-input-'+id).val ""
+            this.text = ""
 
     ChatService.setOnopen () ->
         ws.send (JSON.stringify {path: 'create_client'})
@@ -35,7 +47,7 @@ chatApp.controller "Ctrl", ['$scope', 'ChatService', ($scope, ChatService) ->
         
     ChatService.setOnmessage (event) ->
         data = JSON.parse event.data
-        console.log data
+        console.log '<<DATA>>:', data
         switch data.path
             when 'create_client'
                 msg = {path:'online'}
@@ -45,15 +57,33 @@ chatApp.controller "Ctrl", ['$scope', 'ChatService', ($scope, ChatService) ->
                 msg = {path:'rooms'}
                 ws.send (JSON.stringify msg)
             when 'rooms'
-                for rid in data.rooms
-                    $scope.rooms.push rid
-            when 'connect'
-                msg = {path:'message'}
-                msg.type = data.type
-                msg.oid = data.id
-                msg.body = "From: #{data.id}"
+                $scope.rooms = data.rooms
+                for room in data.rooms
+                    msg = {path: 'join', id: room.oid}
+                    ws.send (JSON.stringify msg)
+                console.log 'rooms:', $scope.rooms
+            when 'join'
+                msg = {path: 'members', id: data.id}
                 ws.send (JSON.stringify msg)
+                console.log 'Joined:', data
+            when 'members'
+                $scope.members[data.id] = {}
+                for member in data.members
+                    $scope.members[data.id][member.oid] = member
+                console.log 'Get members:', $scope.members, data.members
+            when 'presence'
+                switch data.type
+                    when 'room'
+                        switch data.action
+                            when 'join'
+                                $scope.members[data.id][data.member.oid] = data.member
+                            when 'leave'
+                                delete $scope.members[data.id][data.member.oid]
             when 'message'
+                switch data.type
+                    when 'room'
+                        console.log 'received message:', data
+                        $('#room-'+data.id).append "#{data.from}: #{data.body}<br />"
                 console.log 'Message.type:', data.type
 
         $scope.$apply()
@@ -62,12 +92,3 @@ chatApp.controller "Ctrl", ['$scope', 'ChatService', ($scope, ChatService) ->
     
     return 'ok'
 ]
-
-    
-$(document).ready ()->
-    $('form').submit (event) ->
-        msg = $('#message-input').val()
-        if msg.length > 0
-            ws.send msg
-            $('#message-input').val ""
-        return false

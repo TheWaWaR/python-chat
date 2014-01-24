@@ -24,7 +24,11 @@ rand = Random()
 def ws4py():
     return render_template('ws4py.html')
 
+@app.route('/ws4py-visitor')
+def ws4py_visitor():
+    return render_template('ws4py-visitor.html')
 
+    
 #####
 @app.route('/')
 def index():
