@@ -35,6 +35,7 @@ chatApp.controller("Ctrl", [
     $scope.templateUrl = "/static/partials/ws4py.html";
     $scope.rooms = [];
     $scope.members = {};
+    $scope.history = {};
     $scope.users = {};
     $scope.visitors = {};
     $scope.send = function(type, id) {
@@ -44,7 +45,7 @@ chatApp.controller("Ctrl", [
         msg = {
           path: 'message',
           type: type,
-          id: id,
+          id: parseInt(id),
           body: body
         };
         console.log('send:', msg);
@@ -95,6 +96,11 @@ chatApp.controller("Ctrl", [
             id: data.id
           };
           ws.send(JSON.stringify(msg));
+          msg = {
+            path: 'history',
+            id: data.id
+          };
+          ws.send(JSON.stringify(msg));
           console.log('Joined:', data);
           break;
         case 'members':
@@ -106,8 +112,12 @@ chatApp.controller("Ctrl", [
           }
           console.log('Get members:', $scope.members, data.members);
           break;
+        case 'history':
+          $scope.history[data.id] = data.messages;
+          console.log('Get history:', data.id, data.messages);
+          break;
         case 'presence':
-          switch (data.type) {
+          switch (data.to_type) {
             case 'room':
               switch (data.action) {
                 case 'join':
@@ -119,12 +129,12 @@ chatApp.controller("Ctrl", [
           }
           break;
         case 'message':
-          switch (data.type) {
+          switch (data.to_type) {
             case 'room':
               console.log('received message:', data);
-              $('#room-' + data.id).append("" + data.from + ": " + data.body + "<br />");
+              $scope.history[data.to_id].push(data);
           }
-          console.log('Message.type:', data.type);
+          console.log('Message.type:', data.to_type);
       }
       return $scope.$apply();
     });

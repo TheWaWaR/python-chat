@@ -20,6 +20,32 @@ pool = redis.ConnectionPool(connection_class=redis.UnixDomainSocketConnection,
 '''
    暂不支持Group
 '''
+
+class Message(object):
+    messages = {}
+    
+    @staticmethod
+    def history(rid):
+        return Message.messages.get(rid, [])
+
+    @staticmethod
+    def save(from_type, from_id, to_type, to_id, body):
+        msg = {
+            'from_type': from_type,
+            'from_id': from_id,
+            'to_type': to_type,
+            'to_id': to_id,
+            'body': body,
+            'created_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        if to_id in Message.messages:
+            Message.messages[to_id].append(msg)
+        else:
+            Message.messages[to_id] = [msg]   # just for room
+        print 'Message.messages >>> ', Message.messages
+        return msg['created_at']
+    
+
 class Visitor(object):
     pass
 
@@ -44,12 +70,6 @@ class User(object):
     def offline(self):
         self.rd.hdel(User.K_USERS, self.oid)
         
-    # def join_room(self, rid):
-    #     Room.push(self.rd, rid, self.oid)
-        
-    # def leave_room(self, rid):
-    #     Room.pop(self.rd, rid, self.oid)
-
     @staticmethod
     def key(uid): return 'user:%d'%uid
     
@@ -261,6 +281,11 @@ class ChatWebSocket(WebSocket):
     def unsubscribe(self, target_type, target_id):
         channel = '%s-%d' % (target_type, target_id)
         
+        pubsub = self.pubsubs.pop(channel)
+        greenlet = self.greenlets.pop(channel)
+        pubsub.unsubscribe(channel)
+        greenlet.join()
+
         if target_type in ('room', 'group'):
             leave_msg = {
                 'path': 'presence',
@@ -271,10 +296,6 @@ class ChatWebSocket(WebSocket):
             }
             self.redis.publish(channel, json.dumps(leave_msg))
         
-        pubsub = self.pubsubs.pop(channel)
-        greenlet = self.greenlets.pop(channel)
-        pubsub.unsubscribe(channel)
-        greenlet.join()
 
     def subscribe(self, target_type, target_id):
         channel = '%s-%d' % (target_type, target_id)
@@ -285,10 +306,9 @@ class ChatWebSocket(WebSocket):
                 'action': 'join',
                 'type': target_type,
                 'id': target_id,
-                'member': {'oid': self.user.oid, 'name': self.user.name }
+                'member': { 'oid': self.user.oid, 'name': self.user.name }
             }
             self.redis.publish(channel, json.dumps(join_msg))
-        
         
         print 'Subscribe channel:', channel
         pubsub = self.redis.pubsub()
@@ -313,8 +333,8 @@ class ChatWebSocket(WebSocket):
 
                 print 'Received message from redis(channel):', msg
                 data = json.loads(msg['data'])
-                data['type'] = target_type
-                data['id'] = target_id
+                data['to_type'] = target_type
+                data['to_id'] = target_id
                 self.send(json.dumps(data))
                 
         self.greenlets[channel] = gevent.spawn(channel_processor)
@@ -411,9 +431,11 @@ class ChatWebSocket(WebSocket):
         uids = Room.members(self.redis, rid)
         users = [self.redis.hgetall(User.key(int(uid))) for uid in uids]
         return {'members': users, 'id': rid}
-
+        
     def history(self, data):
-        pass
+        rid = data['id']
+        return { 'id': rid, 'messages': Message.history(rid) }
+        
         
     def _message(self, data, msg):
         ''' Send message/typing to room or user(session) '''
@@ -421,8 +443,15 @@ class ChatWebSocket(WebSocket):
         target_id = int(data['id'])
 
         channel = '%s-%d' % (target_type, target_id)
+        
+        from_type = 'user'
+        from_id = self.user.oid
         msg['path'] = data['path']
-        msg['from'] = self.user.oid
+        msg['from_type'] = from_type
+        msg['from_id'] = from_id
+        if 'body' in msg:
+            created_at = Message.save(from_type, from_id, target_type, target_id, msg['body'])
+            msg['created_at'] = created_at
         ret = self.redis.publish(channel, json.dumps(msg))
         return {'status': 'ok'}
         

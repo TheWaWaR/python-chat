@@ -28,6 +28,7 @@ chatApp.controller "Ctrl", ['$scope', 'ChatService', ($scope, ChatService) ->
     $scope.templateUrl = "/static/partials/ws4py.html"
     $scope.rooms = []
     $scope.members = {}
+    $scope.history = {}
     $scope.users = {}
     $scope.visitors = {}
 
@@ -35,7 +36,7 @@ chatApp.controller "Ctrl", ['$scope', 'ChatService', ($scope, ChatService) ->
         # body = $('#message-input-'+id).val()
         body = this.text
         if body.length > 0
-            msg = {path:'message', type:type, id: id, body: body}
+            msg = {path:'message', type:type, id: (parseInt id), body: body}
             console.log 'send:', msg
             ws.send (JSON.stringify msg)
             # $('#message-input-'+id).val ""
@@ -65,14 +66,19 @@ chatApp.controller "Ctrl", ['$scope', 'ChatService', ($scope, ChatService) ->
             when 'join'
                 msg = {path: 'members', id: data.id}
                 ws.send (JSON.stringify msg)
+                msg = {path: 'history', id: data.id}
+                ws.send (JSON.stringify msg)
                 console.log 'Joined:', data
             when 'members'
                 $scope.members[data.id] = {}
                 for member in data.members
                     $scope.members[data.id][member.oid] = member
                 console.log 'Get members:', $scope.members, data.members
+            when 'history'
+                $scope.history[data.id] = data.messages
+                console.log 'Get history:', data.id, data.messages
             when 'presence'
-                switch data.type
+                switch data.to_type
                     when 'room'
                         switch data.action
                             when 'join'
@@ -80,11 +86,12 @@ chatApp.controller "Ctrl", ['$scope', 'ChatService', ($scope, ChatService) ->
                             when 'leave'
                                 delete $scope.members[data.id][data.member.oid]
             when 'message'
-                switch data.type
+                switch data.to_type
                     when 'room'
                         console.log 'received message:', data
-                        $('#room-'+data.id).append "#{data.from}: #{data.body}<br />"
-                console.log 'Message.type:', data.type
+                        $scope.history[data.to_id].push data
+                        # $('#room-'+data.id).append "#{data.from}: #{data.body}<br />"
+                console.log 'Message.type:', data.to_type
 
         $scope.$apply()
         

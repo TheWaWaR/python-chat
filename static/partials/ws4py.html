@@ -6,13 +6,16 @@
     <div class="row">
       <div ng-repeat="room in rooms" class="panel panel-default">
         <div class="panel-heading">
-          <h3 class="panel-title">{{room.name}}</h3>
+          <h3 class="panel-title">{{room.name}} [room]</h3>
         </div>
         <div class="panel-body">
           <div class="container">
             <div class="row">
               <div class="col-sm-9">
                 <div id="room-{{room.oid}}" class="well">
+                  <div class="message" ng-repeat="message in history[room.oid]">
+                    [ {{ message.created_at }} ] {{ message.from_id }} : {{ message.body }}
+                  </div>
                 </div>
                 <hr />
                 <form class="form-inline" role="form" ng-submit="send('room', room.oid)">
