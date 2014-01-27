@@ -147,10 +147,10 @@ chatApp.controller("Ctrl", [
             case 'room':
               switch (data.action) {
                 case 'join':
-                  $scope.members[data.oid][data.member.oid] = data.member;
+                  $scope.members[data.to_id][data.member.oid] = data.member;
                   break;
                 case 'leave':
-                  delete $scope.members[data.oid][data.member.oid];
+                  delete $scope.members[data.to_id][data.member.oid];
               }
           }
           break;

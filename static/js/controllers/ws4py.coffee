@@ -102,9 +102,9 @@ chatApp.controller "Ctrl", ['$scope', 'ChatService', ($scope, ChatService) ->
                     when 'room'
                         switch data.action
                             when 'join'
-                                $scope.members[data.oid][data.member.oid] = data.member
+                                $scope.members[data.to_id][data.member.oid] = data.member
                             when 'leave'
-                                delete $scope.members[data.oid][data.member.oid]
+                                delete $scope.members[data.to_id][data.member.oid]
             when 'message'
                 switch data.to_type
                     when 'room'

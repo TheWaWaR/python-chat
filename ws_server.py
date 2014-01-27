@@ -381,16 +381,6 @@ class ChatWebSocket(WebSocket):
     def subscribe(self, target_type, target_id):
         channel = '%s-%d' % (target_type, target_id)
 
-        if target_type in ('room', 'group') and not Room.has_member(self.redis, target_id, self.user.oid):
-            join_msg = {
-                'path': 'presence',
-                'action': 'join',
-                'type': target_type,
-                'oid': target_id,
-                'member': { 'oid': self.user.oid, 'name': self.user.name }
-            }
-            self.redis.publish(channel, json.dumps(join_msg))
-        
         print 'Subscribe channel:', channel
         pubsub = self.redis.pubsub()
         self.pubsubs[channel] = pubsub
@@ -510,6 +500,15 @@ class ChatWebSocket(WebSocket):
         ''' Join to room '''
         rid = int(data['oid'])
         print 'join(%d)' % rid
+        if not Room.has_member(self.redis, rid, self.user.oid):
+            channel = '%s-%d' % ('room', rid)
+            join_msg = {
+                'path': 'presence',
+                'action': 'join',
+                'member': { 'oid': self.user.oid, 'name': self.user.name }
+            }
+            self.redis.publish(channel, json.dumps(join_msg))
+            
         Room.push(self.redis, rid, self.user.oid)
         self.subscribe('room', rid)
         self.connected_rooms[rid] =  None
@@ -525,8 +524,6 @@ class ChatWebSocket(WebSocket):
         leave_msg = {
             'path': 'presence',
             'action': 'leave',
-            'type': 'room',
-            'oid': rid,
             'member': {'oid': self.obj.oid }
         }
         self.redis.publish(channel, json.dumps(leave_msg))
