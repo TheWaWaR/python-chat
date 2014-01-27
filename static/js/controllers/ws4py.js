@@ -93,6 +93,7 @@ chatApp.controller("Ctrl", [
             ws.send(JSON.stringify(msg));
             console.log('Reset');
           } else {
+            $scope.user.oid = data.oid;
             $scope.user.name = data.name;
             msg = {
               path: 'rooms'

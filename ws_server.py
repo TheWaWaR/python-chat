@@ -59,7 +59,13 @@ class Visitor(object):
         self.rd.delete(self.KEY) # Seems won't happen for now
 
     def online(self):
-        self.rd.hset(Visitor.K_VISITORS, self.oid, True)
+        self.rd.hincrby(Visitor.K_VISITORS, self.oid, 1)
+
+    def offline(self):
+        current = self.rd.hincrby(Visitor.K_VISITORS, self.oid, -1)
+        if not current:
+            self.rd.hdel(Visitor.K_VISITORS, self.oid)
+        return current
 
     @staticmethod
     def key(vid): return 'visitor:%d'%vid
@@ -120,11 +126,14 @@ class User(object):
         self.rd.delete(self.KEY) # Seems won't happen for now
 
     def online(self):
-        self.rd.hset(User.K_USERS, self.oid, True)
+        self.rd.hincrby(User.K_USERS, self.oid, 1)
 
     def offline(self):
-        self.rd.hdel(User.K_USERS, self.oid)
-        
+        current = self.rd.hincrby(User.K_USERS, self.oid, -1)
+        if not current:
+            self.rd.hdel(User.K_USERS, self.oid)
+        return current
+            
     @staticmethod
     def key(uid): return 'user:%d'%uid
     
@@ -241,9 +250,6 @@ class ChatWebSocket(WebSocket):
         'visitor': Visitor
     }
 
-    def is_online(self):
-        return hasattr(self, 'obj')
-    
     # ==============================================================================
     #  WebSocket method override
     # ==============================================================================
@@ -271,31 +277,35 @@ class ChatWebSocket(WebSocket):
         for g_key in ChatWebSocket.keep_channels:
             self.unsubscribe(g_key, 0)
 
-        if self.is_online():
+        # 2. Unsubscribe users
+        print '2. Unsubscribe users'
+        for uid in self.connected_users:
+            self.unsubscribe('user', uid)
+
+        # 3. Unsubscribe rooms
+        print '3. Unsubscribe rooms'
+        for rid in self.connected_rooms:
+            self.unsubscribe('room', rid)
+
+        # 4. Unsubscribe current user's mailbox
+        print '4. Unsubscribe current user/visitor\'s mailbox'
+        self.unsubscribe(self.user_type, self.obj.oid)
+
+        # 5. Notify all rooms/groups/users
+        if hasattr(self, 'obj') and self.obj.offline() == 0:
             offline_msg = {
                 'path': 'presence',
                 'action': 'offline',
                 'oid': self.obj.oid
             }
-            # 2. Unsubscribe users
-            print '2. Unsubscribe users'
             for uid in self.connected_users:
                 user_key = 'user-%d'%uid
-                self.unsubscribe('user', uid)
                 self.redis.publish(user_key, json.dumps(offline_msg))
-    
-            # 3. Unsubscribe rooms
-            print '3. Unsubscribe rooms'
             for rid in self.connected_rooms:
-                room_key = 'room-%d'%rid
                 self.leave({'oid': rid})
+                room_key = 'room-%d'%rid
                 self.redis.publish(room_key, json.dumps(offline_msg))
-    
-            # 4. Unsubscribe current user's mailbox
-            print '4. Unsubscribe current user/visitor\'s mailbox'
-            self.unsubscribe(self.user_type, self.obj.oid)
-            self.obj.offline()
-            
+                
         assert len(self.greenlets.keys()) == 0, 'Unclosed greenlets: %r' % self.greenlets
         assert len(self.pubsubs.keys()) == 0, 'Unclosed pubsubs: %r' % self.pubsubs
         print 'Closed: code=%s, reason=%s' % (code, reason)
@@ -480,7 +490,7 @@ class ChatWebSocket(WebSocket):
             # Current user's mail box
             self.start_mailbox()
             print 'Onlined'
-            return {'name': self.obj.name }
+            return {'oid': self.obj.oid, 'name': self.obj.name }
         
     def offline(self, _):
         # Equal to `closed` ???
@@ -511,7 +521,6 @@ class ChatWebSocket(WebSocket):
         ''' Leave a room '''
         rid = int(data['oid'])
         print 'leave(%d)' % rid
-        self.unsubscribe('room', rid)
         Room.pop(self.redis, rid, self.user.oid)
         return { 'status' : 'success' }
 
