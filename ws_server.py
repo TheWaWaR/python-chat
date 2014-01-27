@@ -230,6 +230,10 @@ class Room(object):
         return rd.hkeys(Room.key_members(rid))
 
     @staticmethod
+    def has_member(rd, rid, uid):
+        return rd.hexists(Room.key_members(rid), uid)
+
+    @staticmethod
     def push(rd, rid, uid):
         return rd.hset(Room.key_members(rid), uid, True)
 
@@ -289,10 +293,14 @@ class ChatWebSocket(WebSocket):
 
         # 4. Unsubscribe current user's mailbox
         print '4. Unsubscribe current user/visitor\'s mailbox'
-        self.unsubscribe(self.user_type, self.obj.oid)
+        if hasattr(self, 'obj'):
+            self.unsubscribe(self.user_type, self.obj.oid)
 
         # 5. Notify all rooms/groups/users
-        if hasattr(self, 'obj') and self.obj.offline() == 0:
+        current_cnt = self.obj.offline()
+        print 'current_cnt:', current_cnt
+        if hasattr(self, 'obj') and current_cnt == 0:
+            print 'Real offline'
             offline_msg = {
                 'path': 'presence',
                 'action': 'offline',
@@ -369,21 +377,11 @@ class ChatWebSocket(WebSocket):
         pubsub.unsubscribe(channel)
         greenlet.join()
 
-        if target_type in ('room', 'group'):
-            leave_msg = {
-                'path': 'presence',
-                'action': 'leave',
-                'type': target_type,
-                'oid': target_id,
-                'member': {'oid': self.obj.oid }
-            }
-            self.redis.publish(channel, json.dumps(leave_msg))
-        
 
     def subscribe(self, target_type, target_id):
         channel = '%s-%d' % (target_type, target_id)
 
-        if target_type in ('room', 'group'):
+        if target_type in ('room', 'group') and not Room.has_member(self.redis, target_id, self.user.oid):
             join_msg = {
                 'path': 'presence',
                 'action': 'join',
@@ -522,6 +520,17 @@ class ChatWebSocket(WebSocket):
         rid = int(data['oid'])
         print 'leave(%d)' % rid
         Room.pop(self.redis, rid, self.user.oid)
+
+        channel = '%s-%d' % ('room', rid)
+        leave_msg = {
+            'path': 'presence',
+            'action': 'leave',
+            'type': 'room',
+            'oid': rid,
+            'member': {'oid': self.obj.oid }
+        }
+        self.redis.publish(channel, json.dumps(leave_msg))
+        
         return { 'status' : 'success' }
 
     def rooms(self, _):
