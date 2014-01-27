@@ -1,5 +1,6 @@
 
 <div class="container">
+  <h3>{{ user.name }}</h3>
   <hr />
 
   <div class="col-sm-9">
@@ -14,7 +15,8 @@
               <div class="col-sm-9">
                 <div id="room-{{room.oid}}" class="well">
                   <div class="message" ng-repeat="message in history[room.oid]">
-                    [ {{ message.created_at }} ] {{ message.from_id }} : {{ message.body }}
+                    <span class="time">[ {{ message.created_at }} ]</span>
+                    <img ng-src="http://www.gravatar.com/avatar/{{message.from_id}}?s=12&d=identicon&f=y" /> : {{ message.body }}
                   </div>
                 </div>
                 <hr />
@@ -28,8 +30,10 @@
                 </form>
               </div>
               <div class="col-sm-3">
-                <div class="list-group">
-                  <li ng-repeat="member in members[room.oid]" class="list-group-item"> {{member.name}}</li>
+                <div class="list-group members">
+                  <li ng-repeat="member in members[room.oid]" class="list-group-item">
+                    <img ng-src="http://www.gravatar.com/avatar/{{member.oid}}?s=12&d=identicon&f=y" /> {{member.name}}
+                  </li>
                 </div>
               </div>
             </div>

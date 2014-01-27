@@ -6,8 +6,19 @@
     <link rel="stylesheet" href="/static/css/gh-fork-ribbon.css" type="text/css" media="screen" />
     
     <script type="text/javascript" src="/static/js/jquery-1.10.2.min.js"></script>
+    <script type="text/javascript" src="/static/js/jquery.cookie.js"></script>
     <script type="text/javascript" src="/static/js/bootstrap.js"></script>
-  </head>                                                                          
+
+    <style type="text/css" media="screen">
+      .list-group.members {
+          font-size: 12px;
+      }
+      .message .time {
+          color: #999;
+      }
+    </style>
+  </head>
+  
   <body ng-controller="Ctrl">
     <!-- 
     <div class="github-fork-ribbon-wrapper left">

@@ -1,7 +1,10 @@
 
-/**** . Create Client for User ****/
+/**** . Create Client for User/Visitor ****/
 // Send
-{'path': 'create_client'}
+{
+    'path': 'create_client',
+    'type': '{user||visitor}',  // Fix later.
+}
 // Receive
 {
     'path': 'create_client',
@@ -9,27 +12,57 @@
 }
 
 
-/**** . User online ****/
+/**** . User/Visitor online ****/
 // Send
 {
     'path': 'online',
+    'type': '{user||visitor}',
     'token': '{hex-str-token}'
 }
 // Receive
 {
     'path': 'online',
-    'user': {'id': '{user.id}', 'name': '{name}'}
+    'obj': {'oid': '{user.id}',
+            'name': '{name}'}
 }
 
 
-/**** . User offline. :HOLD: ****/
+/**** . User offline.(user only) ****/
 // Send
 {'path': 'offline'}
 // Receive
 {'path': 'offline'}
 
 
+/**** . List connected users ****/
+/* 1. send from user: list friends(online/offline)
+   2. send from visitor: list online agents
+ */
+// Send
+{
+    'path': 'users'
+}
+// Receive
+{
+    'path': 'users',
+    'users': [{'oid': '{user.oid}', 'name': '{name}'}, '...']
+}
 
+
+/**** . List connected visitors ****/
+// Send
+{
+    'path': 'visitors'
+}
+// Receive
+{
+    'path': 'visitors',
+    'visitors': [{'oid': '{visitor.oid}', 'name': '{name}'}, '...']
+}
+
+
+
+////////////////////////////// ROOM //////////////////////////////
 /**** . List global rooms  ****/
 // Send
 {'path': 'rooms'}
@@ -38,7 +71,6 @@
     'path': 'rooms'
     'rooms': [{'oid': '{room.oid}', 'name': '{name}'}, '...']
 }
-
 
 
 /**** . Create a global room(admin only) ****/
@@ -50,89 +82,113 @@
 // Receive
 {
     'path': 'create_room',
-    'id': '{room.id}',
+    'oid': '{room.id}',
 }
 
 
 /**** . Destory a global room(admin only) ****/
 // Send
-{'path': 'destory_room', 'id': '{room.id}'}
+{
+    'path': 'destory_room',
+    'oid': '{room.id}'
+}
 // Send
 {
     'path': 'destory_room',
-    'id': '{room.id}',
+    'oid': '{room.id}',
 }
 
 
 /**** . List all users by room id ****/
 // Send
-{'path': 'members', 'id': '{room.id}'}
+{'path': 'members', 'oid': '{room.id}'}
 // Receive
 {
     'path': 'members',
-    'id': '{room.id}',
+    'oid': '{room.id}',
     'members': [{'oid': '0', 'name': 'user-0'}, '...']
 }
 
 
-/**** . Join a room ****/
+/**** . Join a room (user only) ****/
 // Send
-{'path': 'join', 'id': '{room.id}'}
+{'path': 'join', 'oid': '{room.id}'}
 // Receive
 {
     'path': 'join',
-    'id': '{room.id}',
+    'oid': '{room.id}',
 }
 
 
-/**** . Leave a room ****/
+/**** . Leave a room (user only) ****/
 // Send
-{'path': 'leave', 'id': '{room.id}'}
+{'path': 'leave', 'oid': '{room.id}'}
 // Receive
 {
     'path': 'leave',
-    'id': '{room.id}'
+    'oid': '{room.id}'
 }
 
 
 
-/**** . Get history of room/user ****/
+////////////////////////////// Message //////////////////////////////
+/**** . Get history of room/session ****/
 // Send
-{'path': 'history', 'type': '{room||user||visitor}', 'oid': '{rid||uid||vid}'}
+{
+    'path': 'history',
+    'type': '{room||user||visitor}',
+    'oid': '{rid||uid||vid}'
+}
 // Send
 {
     'path': 'history',
     'type': '{room||user||visitor}', // target_type
-    'id': '{rid||uid||vid}',
-    'messages': [{'from': '{user||visitor.oid}', 'body': '{body}', 'datetime': '{datetime}'}, '...']
+    'oid': '{rid||uid||vid}',
+    'messages': [{'from': '{user||visitor.oid}',
+                  'body': '{body}',
+                  'datetime': '{datetime}'},
+                 '...']
 }
 
-
-/**** . Send message to room/user(mailbox)  ****/
+/**** . Send message to room/user(mailbox)/visitor  ****/
 // Send
 {
     'path': 'message',
-    'type': '{room||user||visitor}', // target_type
-    'id': '{rid||uid||vid}',         // target_id(to)
+    'type': '{room||user||visitor}', // to_type
+    'oid': '{rid||uid||vid}',        // to_id
     'body': '{message.body}'
 }
 // Receive, No
 // Then receive from channel
 {
     'path': 'message',
-    'type': '{room||user||visitor}', // target_type
-    'from': '{rid||uid||vid}',       // target_id(from)
+    'from_type': '{user||visitor}',    
+    'from_id': '{uid||vid}',           
+    'to_type': '{room||user||visitor}',
+    'to_id': '{rid||uid||vid}',         
     'body': '{message.body}',
     'status': 'ok||timeout||...'
 }
 
 
-/**** . Send typing notification to room/user(mailbox)  ****/
+/**** . Send typing notification to room/user(mailbox)/visitor  ****/
 // Send
 {
     'path': 'typing',
-    'type': '{room||user||visitor}', // target_type
-    'id': '{rid||uid||vid}',         // target_id
+    'from_type': '{user||visitor}',    
+    'from_id': '{uid||vid}',
+    'to_type': '{room||user||visitor}',
+    'to_id': '{rid||uid||vid}',         
     'typing': '{True||False}'
 }
 // Receive, No
+
+/* What visitor can do:
+   1. create_client: DONE
+   2. online: DONE
+   3. users: TEST required
+   4. message: TEST required
+   5. typing: TEST required
+   6. history: TODO
+ */   
+  

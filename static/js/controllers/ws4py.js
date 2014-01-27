@@ -33,19 +33,20 @@ chatApp.factory("ChatService", function() {
 chatApp.controller("Ctrl", [
   '$scope', 'ChatService', function($scope, ChatService) {
     $scope.templateUrl = "/static/partials/ws4py.html";
+    $scope.user = {};
     $scope.rooms = [];
     $scope.members = {};
     $scope.history = {};
     $scope.users = {};
     $scope.visitors = {};
-    $scope.send = function(type, id) {
+    $scope.send = function(type, oid) {
       var body, msg;
       body = this.text;
-      if (body.length > 0) {
+      if ((body != null) && body.length > 0) {
         msg = {
           path: 'message',
           type: type,
-          id: parseInt(id),
+          oid: parseInt(oid),
           body: body
         };
         console.log('send:', msg);
@@ -54,9 +55,18 @@ chatApp.controller("Ctrl", [
       }
     };
     ChatService.setOnopen(function() {
-      ws.send(JSON.stringify({
-        path: 'create_client'
-      }));
+      var msg, token;
+      token = $.cookie('token');
+      msg = {};
+      if (token != null) {
+        msg.path = 'online';
+        msg.type = 'user';
+        msg.token = token;
+      } else {
+        msg.path = 'create_client';
+        msg.type = 'user';
+      }
+      ws.send(JSON.stringify(msg));
       return console.log('Opened');
     });
     ChatService.setOnmessage(function(event) {
@@ -66,16 +76,30 @@ chatApp.controller("Ctrl", [
       switch (data.path) {
         case 'create_client':
           msg = {
-            path: 'online'
+            path: 'online',
+            type: 'user'
           };
           msg.token = data.token;
+          $.cookie('token', data.token);
           ws.send(JSON.stringify(msg));
           break;
         case 'online':
-          msg = {
-            path: 'rooms'
-          };
-          ws.send(JSON.stringify(msg));
+          if (data.reset != null) {
+            $.removeCookie('token');
+            msg = {
+              path: 'create_client',
+              type: 'user'
+            };
+            ws.send(JSON.stringify(msg));
+            console.log('Reset');
+          } else {
+            $scope.user.name = data.name;
+            msg = {
+              path: 'rooms'
+            };
+            ws.send(JSON.stringify(msg));
+            console.log('Onlined');
+          }
           break;
         case 'rooms':
           $scope.rooms = data.rooms;
@@ -84,7 +108,7 @@ chatApp.controller("Ctrl", [
             room = _ref[_i];
             msg = {
               path: 'join',
-              id: room.oid
+              oid: room.oid
             };
             ws.send(JSON.stringify(msg));
           }
@@ -93,38 +117,39 @@ chatApp.controller("Ctrl", [
         case 'join':
           msg = {
             path: 'members',
-            id: data.id
+            oid: data.oid
           };
           ws.send(JSON.stringify(msg));
           msg = {
             path: 'history',
-            id: data.id
+            type: 'room',
+            oid: data.oid
           };
           ws.send(JSON.stringify(msg));
           console.log('Joined:', data);
           break;
         case 'members':
-          $scope.members[data.id] = {};
+          $scope.members[data.oid] = {};
           _ref1 = data.members;
           for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
             member = _ref1[_j];
-            $scope.members[data.id][member.oid] = member;
+            $scope.members[data.oid][member.oid] = member;
           }
           console.log('Get members:', $scope.members, data.members);
           break;
         case 'history':
-          $scope.history[data.id] = data.messages;
-          console.log('Get history:', data.id, data.messages);
+          $scope.history[data.oid] = data.messages;
+          console.log('Get history:', data.oid, data.messages);
           break;
         case 'presence':
           switch (data.to_type) {
             case 'room':
               switch (data.action) {
                 case 'join':
-                  $scope.members[data.id][data.member.oid] = data.member;
+                  $scope.members[data.oid][data.member.oid] = data.member;
                   break;
                 case 'leave':
-                  delete $scope.members[data.id][data.member.oid];
+                  delete $scope.members[data.oid][data.member.oid];
               }
           }
           break;
