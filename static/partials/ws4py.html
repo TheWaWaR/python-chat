@@ -5,41 +5,49 @@
 
   <div class="col-sm-9">
     <div class="row">
-      <div ng-repeat="room in rooms" class="panel panel-default">
-        <div class="panel-heading">
-          <h3 class="panel-title">{{room.name}} [room]</h3>
-        </div>
-        <div class="panel-body">
-          <div class="container">
-            <div class="row">
-              <div class="col-sm-9">
-                <div id="room-{{room.oid}}" class="well">
-                  <div class="message" ng-repeat="message in history[room.oid]">
-                    <span class="time">[ {{ message.created_at }} ]</span>
-                    <img ng-src="http://www.gravatar.com/avatar/{{message.from_id}}?s=12&d=identicon&f=y" /> : {{ message.body }}
+
+      <ul id="room-tabs" class="nav nav-tabs" style="margin-bottom: 20px;">
+        <li ng-repeat="room in rooms">
+          <a href="#room-{{room.oid}}" data-toggle="tab">{{room.name}}</a>
+        </li>
+      </ul>
+
+      <div class="tab-content">
+        <div ng-repeat="room in rooms"  id="room-{{room.oid}}"
+             class="tab-pane" ng-class="{active: $first}">
+          <div class="">
+            <div class="container">
+              <div class="row">
+                <div class="col-sm-9">
+                  <div id="room-{{room.oid}}" class="well">
+                    <div class="message" ng-repeat="message in history[room.oid]">
+                      <span class="time">[ {{ message.created_at }} ]</span>
+                      <img ng-src="http://www.gravatar.com/avatar/{{message.from_id}}?s=12&d=identicon&f=y" /> : {{ message.body }}
+                    </div>
                   </div>
+                  <hr />
+                  <form class="form-inline" role="form" ng-submit="send('room', room.oid)">
+                    <div class="form-group">
+                      <input type="text" ng-model="text"
+                             class="form-control input-sm" id="message-input-{{room.oid}}" placeholder="Enter Message">
+                    </div>
+                    <div class="form-group">
+                      <button type="submit" class="btn btn-sm btn-primary" >Send</button>
+                    </div>
+                  </form>
                 </div>
-                <hr />
-                <form class="form-inline" role="form" ng-submit="send('room', room.oid)">
-                  <div class="form-group">
-                    <input type="text" ng-model="text" class="form-control" id="message-input-{{room.oid}}" placeholder="Enter Message">
+                <div class="col-sm-3">
+                  <div class="list-group members">
+                    <li ng-repeat="member in members[room.oid]" class="list-group-item">
+                      <img ng-src="http://www.gravatar.com/avatar/{{member.oid}}?s=12&d=identicon&f=y" /> {{member.name}}
+                    </li>
                   </div>
-                  <div class="form-group">
-                    <button type="submit" class="btn btn-primary" >Send</button>
-                  </div>
-                </form>
-              </div>
-              <div class="col-sm-3">
-                <div class="list-group members">
-                  <li ng-repeat="member in members[room.oid]" class="list-group-item">
-                    <img ng-src="http://www.gravatar.com/avatar/{{member.oid}}?s=12&d=identicon&f=y" /> {{member.name}}
-                  </li>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
+          </div> <!-- .panel -->
+        </div>   <!-- .tab-pane -->
+      </div> <!-- .tab-content -->
     </div>
     
   </div>

@@ -34,4 +34,10 @@
   <script type="text/javascript" src="/static/js/libs/angular/angular.js"></script>
   <script type="text/javascript" charset="utf-8" src="/static/js/controllers/ws4py.js"></script>
 
+  <script type="text/javascript">
+    $("#room-tabs a").click(function(e){
+      e.preventDefault();
+      $(this).tab("show");
+    });
+  </script>
 </html>                                  
