@@ -3,4 +3,4 @@ redis
 hiredis
 gevent
 ws4py
-
+gevent-websocket
